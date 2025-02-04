@@ -79,7 +79,7 @@ wikidata_prompts_experiment = {
 for entity_type in ALL_ENTITY_TYPES:
     wikidata_prompts_experiment['dataset_name'] = f'wikidata_{entity_type}'
     get_per_layer_latent_scores(model_alias.split('/')[-1], tokenizer, n_layers, d_model,
-                                LAYERS_WITH_SAE, save=False, **wikidata_prompts_experiment)
+                                LAYERS_WITH_SAE, save=True, **wikidata_prompts_experiment)
 
 # %%
 ### Scatter plot latent separation scores ###
