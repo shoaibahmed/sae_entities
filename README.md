@@ -4,8 +4,8 @@ Paper: https://arxiv.org/abs/2411.14257
 ## Setup
 Setup a virtual environment and install all requirements (this will ask for your HuggingFace token):
 ```bash
-git clone https://github.com/javiferran/entity_recognition.git
-cd entity_recognition
+git clone https://github.com/javiferran/sae_entities.git
+cd sae_entities
 source setup.sh
 ```
 
@@ -22,7 +22,7 @@ The `/mech_interp` folder contains the code to perform the analysis of the SAE l
 ## Get Activations
 To cache residual stream activations, for instance of Gemma 2 2B run:
 ```bash
-cd entity_recognition
+cd sae_entities
 python -m utils.activation_cache --model_alias gemma-2-2b --tokens_to_cache entity --batch_size 128 --entity_type_and_entity_name_format
 ```
 

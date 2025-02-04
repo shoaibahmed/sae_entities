@@ -20,7 +20,7 @@ from mech_interp_utils import get_known_unknown_splits
 from mech_interp_utils import get_acts_labels_dict, get_features_layers, get_top_k_features
 from mech_interp_utils import plot_all_features, read_layer_features
 from mech_interp_utils import html_colors, model_alias_to_sae_repo_id
-from entity_recognition.utils.activation_cache import CachedDataset
+from sae_entities.utils.activation_cache import CachedDataset
 
 SAE_WIDTH = '16k'
 

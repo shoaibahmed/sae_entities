@@ -69,10 +69,10 @@ setup_venv() {
     python -m venv venv
     source venv/bin/activate
 
-    echo "source ~/entity_recognition/venv/bin/activate" >> ~/.bashrc
-    echo "source ~/entity_recognition/venv/bin/activate" >> ~/.zshrc
-    echo "source ~/entity_recognition/venv/bin/activate" >> ~/.bash_profile
-    echo "source ~/entity_recognition/venv/bin/activate" >> ~/.profile
+    echo "source ~/sae_entities/venv/bin/activate" >> ~/.bashrc
+    echo "source ~/sae_entities/venv/bin/activate" >> ~/.zshrc
+    echo "source ~/sae_entities/venv/bin/activate" >> ~/.bash_profile
+    echo "source ~/sae_entities/venv/bin/activate" >> ~/.profile
 
     echo "Done setting up venv!"
 }
