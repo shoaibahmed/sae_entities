@@ -322,7 +322,7 @@ pos_entities_dict_entity_type = {}
 for entity_type in ['player', 'movie', 'song', 'city']:# , 'city', 'movie', 'song'
     tokenized_prompts_dict_entity_type[entity_type], pos_entities_dict_entity_type[entity_type], _ = load_data(model_alias, entity_type, tokenizer)
  # %%
- 
+
 ######
 # Attention to entity (original vs steering)
 ######
@@ -334,7 +334,6 @@ all_heads = True
 split = 'test'
 random_n_latents = 10
 top_latents = [0, 1, 2] # top 3 SAE latents
-top_latents = [0]
 
 # For extracting plots Figure 4 (d) and (e)
 scatter_plot = True
@@ -482,7 +481,6 @@ def compute_significance_test_against_random(random_results, top_latent_results,
         significant_count += stats_dict['significant']==True
 
     return significant_count
-
 
 
 
