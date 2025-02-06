@@ -26,9 +26,17 @@ cd sae_entities
 python -m utils.activation_cache --model_alias gemma-2-2b --tokens_to_cache entity --batch_size 128 --entity_type_and_entity_name_format
 ```
 
+To ensure specificity to entity tokens, we exclude latents that activate frequently (>2%) on random
+tokens sampled from the Pile dataset. So, for extracting activations of random tokens of the Pile dataset, run:
+```bash
+cd sae_entities
+python -m utils.activation_cache --model_alias gemma-2-2b --tokens_to_cache random --batch_size 128 --dataset pile
+```
+
 ### (Optional) Run the model generations
 Model generations can be found in `/dataset/processed`. However, in case you want to get the generations yourself, you can run the following command (this is for the wikidata dataset):
 ```bash
+cd sae_entities
 python -m dataset.process_data.wikidata.create_wikidata_entity_queries --model_path gemma-2-2b --free_generation False
 ```
 
