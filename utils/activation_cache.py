@@ -29,7 +29,7 @@ from utils.utils import clear_memory, model_alias_to_model_name, find_string_in_
 
 random.seed(10)
 
-DEFAULT_CACHE_DIR = os.path.join("../dataset/cached_activations")
+DEFAULT_CACHE_DIR = os.path.join("dataset/cached_activations")
 
 def _get_activations_pre_hook(cache: Float[Tensor, "pos d_model"]):
     def hook_fn(module, input):
