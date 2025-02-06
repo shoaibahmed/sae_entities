@@ -33,7 +33,7 @@ import torch.nn.functional as F
 #from circuitsvis.attention import attention_heads
 from neel_plotly import line, imshow, scatter
 from mech_interp_utils import get_attn_to_entity_tok_mean, get_valid_entities, create_prompts_and_answers, entity_type_to_token_pos
-from mech_interp_utils import load_steering_latents, visualize_attention_patterns
+from mech_interp_utils import load_steering_latents, visualize_attention_patterns, plot_heads_scatter_entity_types
 from dataset.load_data import load_wikidata_queries
 import random
 random.seed(42)
@@ -262,7 +262,9 @@ def test_mean_difference(data, alternative=Literal['greater', 'less', 'two-sided
     
     return results
 
-def compute_attn_original_vs_steered(known_label, steering_latent, pos_type, type_pattern, batch_size, tokenized_prompts_dict_entity_type, pos_entities_dict_entity_type):
+def compute_attn_original_vs_steered(known_label, steering_latent, pos_type, type_pattern, batch_size,
+                                     tokenized_prompts_dict_entity_type, pos_entities_dict_entity_type,
+                                     scatter_plot=False, **scatter_plot_kwargs):
     mean_attn_dict = {}
     mean_attn_dict['Original'] = {}
     mean_attn_dict['Steered'] = {}
@@ -288,14 +290,14 @@ def compute_attn_original_vs_steered(known_label, steering_latent, pos_type, typ
         mean_attn_dict['Steered'][entity_type] = steered_attn
 
 
+    if scatter_plot:
+        fig = plot_heads_scatter_entity_types(mean_attn_dict['Original'], mean_attn_dict['Steered'],
+                        'Original', 'Steered', scatter_plot_kwargs['scatter_plot_heads'],
+                        scatter_plot_kwargs['head_colors'],
+                        f'Attention Scores for Original vs Steered Entities')
 
-    # fig = plot_heads_scatter_entity_types(mean_attn_dict['Original'], mean_attn_dict['Steered'],
-    #                 'Original', 'Steered', heads,
-    #                 head_colors,
-    #                 f'Attention Scores for Original vs Steered Entities')
-
-    # pio.write_image(fig, f'plots/attn_plots/{model_alias}_known_latent_attn_original_vs_steered_entity_types_coeff_{coeff_value}from_{known_label}_{pos_type}_{str(heads)}.png', scale=5, width=600, height=400)
-    # pio.write_image(fig, f'plots/attn_plots/{model_alias}_known_latent_attn_original_vs_steered_entity_types_coeff_{coeff_value}from_{known_label}_{pos_type}_{str(heads)}.pdf', scale=5, width=600, height=400)
+        pio.write_image(fig, f'plots/attn_plots/{model_alias}_known_latent_attn_original_vs_steered_entity_types_coeff_{coeff_value}from_{known_label}_{pos_type}_{str(heads)}.png', scale=5, width=600, height=400)
+        pio.write_image(fig, f'plots/attn_plots/{model_alias}_known_latent_attn_original_vs_steered_entity_types_coeff_{coeff_value}from_{known_label}_{pos_type}_{str(heads)}.pdf', scale=5, width=600, height=400)
     difference_dict = {}
     for entity_type in ['player', 'movie', 'song', 'city']:
         difference_dict[entity_type] = (mean_attn_dict['Steered'][entity_type] - mean_attn_dict['Original'][entity_type])
@@ -303,7 +305,7 @@ def compute_attn_original_vs_steered(known_label, steering_latent, pos_type, typ
     return difference_dict
 
 # %%
-model_alias = 'meta-llama/Llama-3.1-8B'#'gemma-2-9b'
+model_alias = 'gemma-2-2b'#'gemma-2-9b'
 n_devices = torch.cuda.device_count()
 
 model = HookedTransformer.from_pretrained_no_processing(
@@ -320,6 +322,7 @@ pos_entities_dict_entity_type = {}
 for entity_type in ['player', 'movie', 'song', 'city']:# , 'city', 'movie', 'song'
     tokenized_prompts_dict_entity_type[entity_type], pos_entities_dict_entity_type[entity_type], _ = load_data(model_alias, entity_type, tokenizer)
  # %%
+ 
 ######
 # Attention to entity (original vs steering)
 ######
@@ -330,11 +333,19 @@ pos_type = 'entity_last' # position to steer
 all_heads = True
 split = 'test'
 random_n_latents = 10
+top_latents = [0, 1, 2] # top 3 SAE latents
+top_latents = [0]
 
-for filter_with_pile in [True, False]:
-    for idx in [0, 1, 2]:
+# For extracting plots Figure 4 (d) and (e)
+scatter_plot = True
+scatter_plot_kwargs = {}
+scatter_plot_kwargs['scatter_plot_heads'] = [[20,3], [18,5]]
+scatter_plot_kwargs['head_colors'] = [html_colors['blue_matplotlib'], html_colors['orange_matplotlib']]
+
+for filter_with_pile in [True]:
+    for idx in top_latents:
         top_latents = {'known': idx, 'unknown': idx}
-        coeff_values = {'known': 20, 'unknown': 20}
+        coeff_values = {'known': 100 if 'gemma' in model_alias else 20, 'unknown': 100 if 'gemma' in model_alias else 20}
 
         known_latent, unknown_latent, random_latents_known, random_latents_unknown = load_latents(model_alias, top_latents,
                                                                                                 random_n_latents=random_n_latents,
@@ -351,11 +362,9 @@ for filter_with_pile in [True, False]:
             if model_alias == 'gemma-2-2b':
                 for known_label in ['known', 'unknown']:
                     heads_dict[known_label] = [[15,5], [18,5], [20,3], [25,4]]
-                    #heads = [[20,3], [22,0], [25,4]]
             else:
                 for known_label in ['known', 'unknown']:
                     heads_dict[known_label] = [[25,2], [26,2], [29,14], [33,7], [37,12], [39,7]]
-                #heads = [[33,7], [37,12], [39,7]]
         else:
             for known_label in ['known', 'unknown']:
                 for layer in range(layer_start[known_label], model.cfg.n_layers):
@@ -370,7 +379,9 @@ for filter_with_pile in [True, False]:
             steering_latent = unknown_latent[0] if known_label == 'known' else known_latent[0]
 
 
-            difference_dict = compute_attn_original_vs_steered(known_label, steering_latent, pos_type, type_pattern, batch_size, tokenized_prompts_dict_entity_type, pos_entities_dict_entity_type)
+            difference_dict = compute_attn_original_vs_steered(known_label, steering_latent, pos_type, type_pattern,
+                                                               batch_size, tokenized_prompts_dict_entity_type, pos_entities_dict_entity_type,
+                                                               scatter_plot=scatter_plot, **scatter_plot_kwargs)
 
             # Concatenate tensors from all entity types
             all_values = []
@@ -381,7 +392,6 @@ for filter_with_pile in [True, False]:
 
             data_save = {}
             for layer, head in heads_dict[known_label]:
-                print(layer, head)
                 values_head = concatenated[:, layer, head]
                 data_save[f'L{layer}H{head}'] = values_head
             
@@ -437,6 +447,18 @@ for filter_with_pile in [True, False]:
             np.save(save_path, list_difference_dict)
 
 # %%
+def load_attn_diff_results(model_alias, coeff_value, known_label, top_latent_idx, pos_type, filter_with_pile):
+        random_results_path = f'./attn_steering_values/{model_alias}_random_coeff_{coeff_value}from_{known_label}_{top_latent_idx}_{pos_type}_pile_filtering_{filter_with_pile}.npy'
+        random_results = np.load(random_results_path, allow_pickle=True)
+
+        top_latent_results_path = f'./attn_steering_values/{model_alias}_coeff_{coeff_value}from_{known_label}_{top_latent_idx}_{pos_type}_pile_filtering_{filter_with_pile}.npy'
+        top_latent_results = np.load(top_latent_results_path, allow_pickle=True)
+
+        return random_results, top_latent_results
+
+
+# %%
+# Statistical significance tests
 def compute_significance_test_against_random(random_results, top_latent_results, known_label):
     significant_count = 0
     for random_idx in range(len(random_results)):
@@ -461,38 +483,32 @@ def compute_significance_test_against_random(random_results, top_latent_results,
 
     return significant_count
 
-def load_attn_diff_results(model_alias, coeff_value, known_label, top_latent_idx, pos_type, filter_with_pile):
-        random_results_path = f'./attn_steering_values/{model_alias}_random_coeff_{coeff_value}from_{known_label}_{top_latent_idx}_{pos_type}_pile_filtering_{filter_with_pile}.npy'
-        random_results = np.load(random_results_path, allow_pickle=True)
 
-        top_latent_results_path = f'./attn_steering_values/{model_alias}_coeff_{coeff_value}from_{known_label}_{top_latent_idx}_{pos_type}_pile_filtering_{filter_with_pile}.npy'
-        top_latent_results = np.load(top_latent_results_path, allow_pickle=True)
 
-        return random_results, top_latent_results
 
+pos_type = 'entity_last'
+filter_with_pile = True
 significant_count_dict = {}
-for model_alias in ['gemma-2-2b', 'gemma-2-9b', 'meta-llama/Llama-3.1-8B']:
+for model_alias in ['gemma-2-2b']:#, 'gemma-2-9b', 'meta-llama/Llama-3.1-8B']:
     model_alias = model_alias.replace('/','_')
     significant_count_dict[model_alias] = {}
     for known_label in ['known', 'unknown']:
         significant_count_dict[model_alias][known_label] = {}
-        for filter_with_pile in [True, False]:
-            significant_count_dict[model_alias][known_label][filter_with_pile] = {}
-            for top_latent_idx in range(3):
-            #top_latent_idx = 0
-            #coeff_value = coeff_values['known'] if known_label == 'unknown' else coeff_values['known']
-                coeff_value = 100 if 'gemma' in model_alias else 20
+        significant_count_dict[model_alias][known_label][filter_with_pile] = {}
+        for top_latent_idx in range(3):
+            # We pick top 3 latents
+            coeff_value = 100 if 'gemma' in model_alias else 20
 
-                random_results, top_latent_results = load_attn_diff_results(model_alias, coeff_value, known_label, top_latent_idx, pos_type, filter_with_pile)
+            random_results, top_latent_results = load_attn_diff_results(model_alias, coeff_value, known_label, top_latent_idx, pos_type, filter_with_pile)
 
-                significant_count = compute_significance_test_against_random(random_results, top_latent_results, known_label)
-                significant_count_dict[model_alias][known_label][filter_with_pile][top_latent_idx] = significant_count
-                print(f'Significant count {model_alias} {known_label} {filter_with_pile}: {significant_count}')
+            significant_count = compute_significance_test_against_random(random_results, top_latent_results, known_label)
+            significant_count_dict[model_alias][known_label][filter_with_pile][top_latent_idx] = significant_count
+            print(f'Significant count {model_alias} {known_label} {filter_with_pile}: {significant_count}')
 
 
 # %%
 
-head = 'L17H26'
+head = 'L23H0'
 for random_idx in range(len(random_results)):
     random_latent = random_results[random_idx][head]
     top_latent = top_latent_results[()][head]
