@@ -20,7 +20,7 @@ The `/dataset` folder contains the necessary code to create the dataset and run 
 The `/mech_interp` folder contains the code to perform the analysis of the SAE latents.
 
 ## Get Activations
-To cache residual stream activations, for instance of Gemma 2 2B run:
+To cache residual stream activations on entity tokens, for instance of Gemma 2 2B run:
 ```bash
 cd sae_entities
 python -m utils.activation_cache --model_alias gemma-2-2b --tokens_to_cache entity --batch_size 128 --entity_type_and_entity_name_format
