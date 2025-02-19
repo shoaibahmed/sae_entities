@@ -378,7 +378,8 @@ def load_steering_latents(
     input_latent=False,
     model_alias: str = 'gemma-2-2b',
     tokens_to_cache: str = 'entity',
-    evaluate_on: Literal['entities', 'prompts'] = 'entities'
+    evaluate_on: Literal['entities', 'prompts'] = 'entities',
+    feature_type: str = 'latents',
     ):
     random.seed(random_seed)
     print('Loading steering latents for model:', model_alias)
@@ -392,7 +393,7 @@ def load_steering_latents(
     repo_id = model_alias_to_sae_repo_id[model_alias]
     if isinstance(specific_latents, list):
         layers_range = [latent[0] for latent in specific_latents]
-    feats_layers = read_layer_features(model_alias, layers_range, entity_type, scoring_method, tokens_to_cache, evaluate_on)
+    feats_layers = read_layer_features(model_alias, layers_range, entity_type, scoring_method, tokens_to_cache, evaluate_on, feature_type)
 
     #print('feats_layers[13]', feats_layers[13][label].keys())
 
@@ -561,7 +562,7 @@ def get_acts_labels_dict(model_alias, tokenizer, dataloader, queries, prompts: L
         acts_labels_dict[layer] = acts_labels
     return acts_labels_dict
 
-def get_features_layers(model_alias, acts_labels_dict, layers, sae_width, repo_id, save=True, **kwargs):
+def get_features_layers(model_alias, acts_labels_dict, layers, sae_width, repo_id, feature_type='latents', save=True, **kwargs):
     """
     Get the features for each layer using the SAE.
 
@@ -582,6 +583,7 @@ def get_features_layers(model_alias, acts_labels_dict, layers, sae_width, repo_i
             - A list of feature indices.
             - A list of top scores for the features.
     """
+    assert feature_type in ["latents", "hidden"], feature_type
     feats_per_layer = {}
     assert 0 not in layers, "Layer 0 is not a valid layer for the SAE"
 
@@ -590,26 +592,31 @@ def get_features_layers(model_alias, acts_labels_dict, layers, sae_width, repo_i
 
     formatted_feats_layer = {}
     for layer in layers:
-        # Load SAE
-        if model_alias == 'gemma-2b-it':
-            assert layer == 13, "Layer 13 is the only layer for gemma-2b-it"
-            sae_id = "gemma-2b-it-res-jb"
-        elif model_alias == 'meta-llama/Llama-3.1-8B' or model_alias == 'meta-llama_Llama-3.1-8B':
-            #assert layer in [14,15,16,17,18,19], "Layer 14, 15, 16, 17, 18, 19 are the only layers for meta-llama/Llama-3.1-8B"
-            sae_id = f"l{layer-1}r_8x"
-        elif model_alias == 'gemma-2-9b-it':
-            assert layer in [10, 21, 32], "Layer 10, 21, 32 are the only layers for gemma-2-9b-it"
-            sae_sparsity = layer_sparisity_widths[model_alias][layer-1][sae_width]
-            sae_id = f"layer_{layer-1}/width_{sae_width}/average_l0_{str(sae_sparsity)}"
-        else:
-            sae_sparsity = layer_sparisity_widths[model_alias][layer-1][sae_width]
-            sae_id = f"layer_{layer-1}/width_{sae_width}/average_l0_{str(sae_sparsity)}"
-        print(f'Loading SAE for layer {layer}')
-        sae = load_sae(repo_id, sae_id)
-
         acts_labels = acts_labels_dict[layer]
-        # Get activations
-        sae_acts = sae.encode(acts_labels['acts'])
+
+        if feature_type == "latents":
+            # Load SAE
+            if model_alias == 'gemma-2b-it':
+                assert layer == 13, "Layer 13 is the only layer for gemma-2b-it"
+                sae_id = "gemma-2b-it-res-jb"
+            elif model_alias == 'meta-llama/Llama-3.1-8B' or model_alias == 'meta-llama_Llama-3.1-8B':
+                #assert layer in [14,15,16,17,18,19], "Layer 14, 15, 16, 17, 18, 19 are the only layers for meta-llama/Llama-3.1-8B"
+                sae_id = f"l{layer-1}r_8x"
+            elif model_alias == 'gemma-2-9b-it':
+                assert layer in [10, 21, 32], "Layer 10, 21, 32 are the only layers for gemma-2-9b-it"
+                sae_sparsity = layer_sparisity_widths[model_alias][layer-1][sae_width]
+                sae_id = f"layer_{layer-1}/width_{sae_width}/average_l0_{str(sae_sparsity)}"
+            else:
+                sae_sparsity = layer_sparisity_widths[model_alias][layer-1][sae_width]
+                sae_id = f"layer_{layer-1}/width_{sae_width}/average_l0_{str(sae_sparsity)}"
+            print(f'Loading SAE for layer {layer}')
+            sae = load_sae(repo_id, sae_id)
+
+            # Get activations
+            sae_acts = sae.encode(acts_labels['acts'])
+        else:
+            assert feature_type == "hidden"
+            sae_acts = acts_labels['acts']  # directly take model activations
 
         # Get labels
         label_indices_1 = torch.where(acts_labels['labels'] == 1.0)[0]
@@ -636,7 +643,7 @@ def get_features_layers(model_alias, acts_labels_dict, layers, sae_width, repo_i
         dataset_name = kwargs['dataset_name']
         evaluate_on = kwargs['evaluate_on']
         tokens_to_cache = kwargs['tokens_to_cache']
-        folder = f'./train_latents_layers_{evaluate_on}/{scoring_method}/{model_alias}/{tokens_to_cache}'
+        folder = f'./train_{feature_type}_layers_{evaluate_on}/{scoring_method}/{model_alias}/{tokens_to_cache}'
         os.makedirs(folder, exist_ok=True)
         if 'wikidata' in dataset_name:
             entity_type = dataset_name.split('_')[1]
@@ -752,11 +759,11 @@ def format_layer_features(feats_per_layer, filename_prefix, save=False):
 
     return final_feats_dict
 
-def read_layer_features(model_alias, layers, entity_type, scoring_method, tokens_to_cache, evaluate_on):
+def read_layer_features(model_alias, layers, entity_type, scoring_method, tokens_to_cache, evaluate_on, feature_type='latents'):
     """
     Read the layer features from JSON files.
     """
-    folder = f'./train_latents_layers_{evaluate_on}/{scoring_method}/{model_alias.split("/")[-1]}/{tokens_to_cache}'
+    folder = f'./train_{feature_type}_layers_{evaluate_on}/{scoring_method}/{model_alias.split("/")[-1]}/{tokens_to_cache}'
     filename_prefix = f'{folder}/{entity_type}'
 
     feats_layers = {}
@@ -1504,18 +1511,18 @@ def bar_latents_effect_plot(logit_diffs_results:List[Tensor], xticks_labels:List
     return fig
 
 
-def load_latents(model_alias, top_latents, filter_with_pile=False, **kwargs):
+def load_latents(model_alias, top_latents, feature_type='latents', filter_with_pile=False, **kwargs):
     # Load steering latents
     # Read the sorted scores for unknown entities
     if filter_with_pile == True:
-        with open(f'./train_latents_layers_entities/absolute_difference/{model_alias}/entity/pile_filtered_scores_min_known.json', 'r') as f:
+        with open(f'./train_{feature_type}_layers_entities/absolute_difference/{model_alias}/entity/pile_filtered_scores_min_known.json', 'r') as f:
             sorted_scores_known = json.load(f)
-        with open(f'./train_latents_layers_entities/absolute_difference/{model_alias}/entity/pile_filtered_scores_min_unknown.json', 'r') as f:
+        with open(f'./train_{feature_type}_layers_entities/absolute_difference/{model_alias}/entity/pile_filtered_scores_min_unknown.json', 'r') as f:
             sorted_scores_unknown = json.load(f)
     else:
-        with open(f'./train_latents_layers_entities/absolute_difference/{model_alias}/entity/sorted_scores_min_known.json', 'r') as f:
+        with open(f'./train_{feature_type}_layers_entities/absolute_difference/{model_alias}/entity/sorted_scores_min_known.json', 'r') as f:
             sorted_scores_known = json.load(f)
-        with open(f'./train_latents_layers_entities/absolute_difference/{model_alias}/entity/sorted_scores_min_unknown.json', 'r') as f:
+        with open(f'./train_{feature_type}_layers_entities/absolute_difference/{model_alias}/entity/sorted_scores_min_unknown.json', 'r') as f:
             sorted_scores_unknown = json.load(f)
     # Known latent
     known_latent_ = list(sorted_scores_known.keys())[top_latents['known']]
@@ -1532,22 +1539,26 @@ def load_latents(model_alias, top_latents, filter_with_pile=False, **kwargs):
                                                                             #layers_range=[known_latent[0]],
                                                                             specific_latents=known_latent_id,
                                                                             model_alias=model_alias,
-                                                                            random_latents=False)
+                                                                            random_latents=False,
+                                                                            feature_type=feature_type)
 
     unknown_latent: List[Tuple[int, float, Tensor]] = load_steering_latents('movie', label='unknown', topk=1,
                                                                             #layers_range=[unknown_latent[0]],
                                                                             specific_latents=unknown_latent_id,
                                                                             model_alias=model_alias,
-                                                                            random_latents=False)
+                                                                            random_latents=False,
+                                                                            feature_type=feature_type)
 
     random_latents_known: List[Tuple[int, float, Tensor]] = load_steering_latents('movie', label='known', topk=kwargs['random_n_latents'],
                                                                               layers_range=[layer_known],
                                                                               model_alias=model_alias,
-                                                                              random_latents=True)
+                                                                              random_latents=True,
+                                                                              feature_type=feature_type)
     
     random_latents_unknown: List[Tuple[int, float, Tensor]] = load_steering_latents('movie', label='unknown', topk=kwargs['random_n_latents'],
                                                                               layers_range=[layer_unknown],
                                                                               model_alias=model_alias,
-                                                                              random_latents=True)
+                                                                              random_latents=True,
+                                                                              feature_type=feature_type)
     
     return known_latent, unknown_latent, random_latents_known, random_latents_unknown

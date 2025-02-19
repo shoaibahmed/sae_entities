@@ -153,7 +153,7 @@ def get_acts_labels_dict_(model_alias, tokenizer, dataloader, sae_layers, **kwar
 
 
 ### Latents scores per layer ###
-def get_per_layer_latent_scores(model_alias, tokenizer, n_layers, d_model, sae_layers, save=False, **kwargs):
+def get_per_layer_latent_scores(model_alias, tokenizer, n_layers, d_model, sae_layers, feature_type='latents', save=False, **kwargs):
     """
     Compute latent scores for each layer of the model.
 
@@ -178,12 +178,13 @@ def get_per_layer_latent_scores(model_alias, tokenizer, n_layers, d_model, sae_l
     # Get cached activations and labels
     acts_labels_dict = get_acts_labels_dict_(model_alias, tokenizer, dataloader, sae_layers, **kwargs)
     # Get features info per layer and (optionally) save them as JSON files
-    get_features_layers(model_alias, acts_labels_dict, sae_layers, SAE_WIDTH, repo_id, save, **kwargs)
+    get_features_layers(model_alias, acts_labels_dict, sae_layers, SAE_WIDTH, repo_id, feature_type, save, **kwargs)
 
 
 
 ### Scatter plot latent separation scores ###
-def scatter_plot_latent_separation_scores_experiment(model_alias, tokenizer, entity_type, tokens_to_cache, n_layers, testing_layers, d_model, entity_type_and_entity_name_format=False):
+def scatter_plot_latent_separation_scores_experiment(model_alias, tokenizer, entity_type, tokens_to_cache, n_layers, testing_layers,
+                                                     d_model, entity_type_and_entity_name_format=False, feature_type='latents'):
     # Parameters
     evaluate_on = 'entities' # keep as 'entities' for computing the scatter plot
     scoring_method = 'absolute_difference' # keep this as 'absolute_difference' for computing the scatter plot
@@ -193,7 +194,7 @@ def scatter_plot_latent_separation_scores_experiment(model_alias, tokenizer, ent
     repo_id = model_alias_to_sae_repo_id[model_alias]
    
     # Get features scores for all layers in the training set
-    feats_layers = read_layer_features(model_alias, testing_layers, entity_type, scoring_method, tokens_to_cache, evaluate_on)
+    feats_layers = read_layer_features(model_alias, testing_layers, entity_type, scoring_method, tokens_to_cache, evaluate_on, feature_type)
     train_feats_dict = get_top_k_features(feats_layers, k=None)
 
     # Get features scores for all layers in the test set
@@ -211,13 +212,14 @@ def scatter_plot_latent_separation_scores_experiment(model_alias, tokenizer, ent
 
     # we always save scatter plots
     fig = plot_all_features(test_final_feats_dict, train_feats_dict, entity_type, k=10, labels=False)
-    os.makedirs('./plots/scatter_plots', exist_ok=True)
-    fig.savefig(f'./plots/scatter_plots/{model_alias}_feature_activation_frequencies_smaller_{entity_type}_{str(testing_layers)}.png', transparent=True)
-    fig.savefig(f'./plots/scatter_plots/{model_alias}_feature_activation_frequencies_smaller_{entity_type}_{str(testing_layers)}.pdf', transparent=True)
+    os.makedirs(f'./plots_{feature_type}/scatter_plots', exist_ok=True)
+    fig.savefig(f'./plots_{feature_type}/scatter_plots/{model_alias}_feature_activation_frequencies_smaller_{entity_type}_{str(testing_layers)}.png', transparent=True)
+    fig.savefig(f'./plots_{feature_type}/scatter_plots/{model_alias}_feature_activation_frequencies_smaller_{entity_type}_{str(testing_layers)}.pdf', transparent=True)
     fig.show()
 
 ### Searching for the top general latents ###
-def get_general_latents(model_alias, entity_types, testing_layers, tokens_to_cache, evaluate_on, scoring_method, filter_with_pile=False):
+def get_general_latents(model_alias, entity_types, testing_layers, tokens_to_cache, evaluate_on, scoring_method, filter_with_pile=False,
+                        feature_type='latents'):
     """
     Analyze and identify general latents across different entity types.
 
@@ -253,7 +255,7 @@ def get_general_latents(model_alias, entity_types, testing_layers, tokens_to_cac
         ranks[known_label] = defaultdict(list)
 
         for entity_type in entity_types:
-            feats_layers = read_layer_features(model_alias, testing_layers, entity_type, scoring_method, tokens_to_cache, evaluate_on)
+            feats_layers = read_layer_features(model_alias, testing_layers, entity_type, scoring_method, tokens_to_cache, evaluate_on, feature_type)
             train_feats_dict = get_top_k_features(feats_layers, k=None)
             for latent_idx in train_feats_dict[known_label].keys():
                 latent = train_feats_dict[known_label][latent_idx]
@@ -273,14 +275,14 @@ def get_general_latents(model_alias, entity_types, testing_layers, tokens_to_cac
         sorted_ranks_mean = dict(sorted(ranks_mean.items(), key=lambda item: item[1], reverse=False))
         sorted_scores_min = dict(sorted(scores_min.items(), key=lambda item: item[1], reverse=True))
 
-        save_dir = f'./train_latents_layers_{evaluate_on}/{scoring_method}/{model_alias}/{tokens_to_cache}'
+        save_dir = f'./train_{feature_type}_layers_{evaluate_on}/{scoring_method}/{model_alias}/{tokens_to_cache}'
         print('saving in', save_dir)
         os.makedirs(save_dir, exist_ok=True)
         for sorted_dict in zip([sorted_scores_min, sorted_scores_mean, sorted_ranks_mean], ['scores_min', 'scores_mean', 'ranks_mean']):
             if filter_with_pile:
                 final_sorted_dict = {}
                 counter = 0
-                feats_layers_pile = read_layer_features(model_alias, testing_layers, 'pile', scoring_method, 'random', 'random')
+                feats_layers_pile = read_layer_features(model_alias, testing_layers, 'pile', scoring_method, 'random', 'random', feature_type)
                 for latent_id in list(sorted_dict[0].keys()):
                     layer_latent = int(latent_id[1:latent_id.find('F')])
                     latent_idx = float(latent_id[latent_id.find('F')+1:])
@@ -308,7 +310,7 @@ def get_general_latents(model_alias, entity_types, testing_layers, tokens_to_cac
 
 # %%
 #### Layerwise Latent Scores Analysis ####
-def get_layerwise_latent_scores(model_alias, sae_layers, tokens_to_cache, scoring_method, entity_types, top_k):
+def get_layerwise_latent_scores(model_alias, sae_layers, tokens_to_cache, scoring_method, entity_types, top_k, feature_type='latents'):
     """
     Get layerwise latent scores for a given model, tokens to cache, evaluate on, scoring method, and top k.
     """
@@ -329,7 +331,7 @@ def get_layerwise_latent_scores(model_alias, sae_layers, tokens_to_cache, scorin
         # Get scores and ranks for all layers. These are computed for each entity type
         for entity_type in entity_types:
             top_scores_layers[known_label][entity_type] = defaultdict(list)
-            feats_layers = read_layer_features(model_alias, sae_layers, entity_type, scoring_method, tokens_to_cache, evaluate_on)
+            feats_layers = read_layer_features(model_alias, sae_layers, entity_type, scoring_method, tokens_to_cache, evaluate_on, feature_type)
             for layer in feats_layers.keys():
                 for latent_idx in feats_layers[layer][known_label].keys():
                     latent = feats_layers[layer][known_label][latent_idx]
@@ -356,7 +358,7 @@ def get_layerwise_latent_scores(model_alias, sae_layers, tokens_to_cache, scorin
     return top_scores_layers, minmax_layerwise_scores
 
 
-def plot_layerwise_latent_scores(model_alias, sae_layers, top_scores_layers, minmax_layerwise_scores, known_label, top_k):
+def plot_layerwise_latent_scores(model_alias, sae_layers, top_scores_layers, minmax_layerwise_scores, known_label, top_k, feature_type='latents'):
 
     entity_types = list(top_scores_layers[known_label].keys())
     colors = [html_colors['blue_drawio'], html_colors['grey_drawio'], html_colors['green_drawio'], html_colors['brown_D3']]  # Add more colors if needed
@@ -432,11 +434,11 @@ def plot_layerwise_latent_scores(model_alias, sae_layers, top_scores_layers, min
     )
 
     fig = paper_plot(fig, tickangle=0)
-    os.makedirs(f'plots/layerwise_evolution', exist_ok=True)
-    pio.write_image(fig, f'plots/layerwise_evolution/{model_alias}_entities_top_scores_layers_{known_label}.png',
+    os.makedirs(f'plots_{feature_type}/layerwise_evolution', exist_ok=True)
+    pio.write_image(fig, f'plots_{feature_type}/layerwise_evolution/{model_alias}_entities_top_scores_layers_{known_label}.png',
                         scale=10, width=500, height=315)# width=475, height=300
     
-    pio.write_image(fig, f'plots/layerwise_evolution/{model_alias}_entities_top_scores_layers_{known_label}.pdf',
+    pio.write_image(fig, f'plots_{feature_type}/layerwise_evolution/{model_alias}_entities_top_scores_layers_{known_label}.pdf',
                         scale=10, width=500, height=315)# width=475, height=300
 
     fig.show()
