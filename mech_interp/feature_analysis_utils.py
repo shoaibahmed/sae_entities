@@ -204,7 +204,7 @@ def scatter_plot_latent_separation_scores_experiment(model_alias, tokenizer, ent
                                                   dataset_name=f'wikidata_{entity_type}', evaluate_on=evaluate_on, split=split,
                                                   free_generation=False, consider_refusal_label=False,
                                                   further_split=False, entity_type_and_entity_name_format=entity_type_and_entity_name_format)
-    test_feats_layers = get_features_layers(model_alias, test_acts_labels_dict, testing_layers, SAE_WIDTH, repo_id,
+    test_feats_layers = get_features_layers(model_alias, test_acts_labels_dict, testing_layers, SAE_WIDTH, repo_id, feature_type,
                                             save, scoring_method=scoring_method, min_activations=min_activations,
                                             dataset_name=f'wikidata_{entity_type}')
 
