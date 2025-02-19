@@ -40,6 +40,8 @@ cd sae_entities
 python -m dataset.process_data.wikidata.create_wikidata_entity_queries --model_path gemma-2-2b --free_generation False
 ```
 
+## Direct Hidden Rep Analysis
+In `mech_interp/hidden_analysis.py` we run the metrics to find the most relevant hiddens.
 
 ## SAE Latent Analysis
 In `mech_interp/feature_analysis.py` we compute the SAE latent scores for all layers as well as run metrics to find the most relevant latents.
