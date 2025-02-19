@@ -634,7 +634,11 @@ def get_features_layers(model_alias, acts_labels_dict, layers, sae_width, repo_i
                                                     )
 
         feats_per_layer[layer] = (scores_dict, freq_acts_dict, mean_features_acts)
-        del sae_acts_0, sae_acts_1, sae_acts, sae
+        if feature_type == "latents":
+            del sae_acts_0, sae_acts_1, sae_acts, sae
+        else:
+            assert feature_type == "hidden", feature_type
+            del sae_acts
         torch.cuda.empty_cache()
         gc.collect()
 
