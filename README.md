@@ -40,7 +40,7 @@ cd sae_entities
 python -m dataset.process_data.wikidata.create_wikidata_entity_queries --model_path gemma-2-2b --free_generation False
 ```
 
-## Direct Hidden Rep Analysis
+## [New] Direct Hidden Rep Analysis
 In `mech_interp/hidden_analysis.py` we run the metrics to find the most relevant hiddens.
 
 ## SAE Latent Analysis
@@ -51,6 +51,10 @@ Generate and cache the activations for `model` token, appearing at the end of in
 ```bash
 python -m utils.activation_cache --model_alias gemma-2b-it --tokens_to_cache model --batch_size 128
 ```
+
+## Refusal Analysis
+Models refuse to answer questions about unknown entities. We can therefore analyze the effect of steering the model towards an unknown entity latent by measuring the model's refusal rate.
+In `mech_interp/feature_analysis.py` we evaluate the impact of this steering.
 
 ## Citation
 If you find this work useful, please consider citing:
