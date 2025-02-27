@@ -386,7 +386,7 @@ def load_steering_latents(
 
     if random_latents:
         print('Loading random latents')
-        
+
     # Read top features
     # TODO: make this dynamic if we change model
     sae_width = '16k'
@@ -423,7 +423,7 @@ def load_steering_latents(
         #     available_indices.remove(top_indices)
         # Remove indices of latents with score > 0
 
-        min_max_scores = json.load(open(f"./train_latents_layers_entities/absolute_difference/{model_alias.split('/')[-1]}/entity/sorted_scores_min_{label}.json"))
+        min_max_scores = json.load(open(f"./train_{feature_type}_layers_entities/absolute_difference/{model_alias.split('/')[-1]}/entity/sorted_scores_min_{label}.json"))
         for idx in all_sae_latents_dict[label].keys():
             latent_id = f"L{all_sae_latents_dict[label][idx]['layer']}F{all_sae_latents_dict[label][idx]['latent_idx']}"
             if abs(min_max_scores[latent_id]) > 0.0:
@@ -465,14 +465,22 @@ def load_steering_latents(
         else:
             sae_id = f"layer_{layer-1}/width_{sae_width}/average_l0_{str(layer_sparisity_widths[model_alias][layer-1][sae_width])}"
         sae = load_sae(repo_id, sae_id)
+        layer_feature_dim = sae.W_enc.shape[0]
+
         for latent_info in top_sae_latents:
             if latent_info['layer'] == layer:
                 latent_idx = latent_info['latent_idx']
                 mean_act = latent_info['mean_act']
-                if input_latent:
-                    direction = sae.W_enc[:,latent_idx].detach()#.cpu()
+                if feature_type == "hidden":
+                    assert not input_latent, "Input latent arg has no meaning for hidden feature type -- leave it as default"
+                    direction = torch.zeros((layer_feature_dim,), dtype=torch.float32)  # vector of all zeros
+                    direction[latent_idx] = 1.  # one-hot vector for intervention
                 else:
-                    direction = sae.W_dec[latent_idx].detach()#.cpu()
+                    assert feature_type == "latents", feature_type
+                    if input_latent:
+                        direction = sae.W_enc[:,latent_idx].detach()#.cpu()
+                    else:
+                        direction = sae.W_dec[latent_idx].detach()#.cpu()
                 latents.append((layer, latent_idx, mean_act, direction))
         del sae
 
