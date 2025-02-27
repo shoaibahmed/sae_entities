@@ -56,7 +56,7 @@ def run_generations(model, N, tokenized_prompts, max_new_tokens, batch_size=8):
     torch.cuda.empty_cache()
     return original_generations_full
 
-def plot_counter_refusal(counter_refusal, save, **kwargs):
+def plot_counter_refusal(counter_refusal, save, feature_type='latents', **kwargs):
     counter_refusal_category_to_plot_label = {'original': 'Original generation', 'steered_known': 'Steering known latent',
                                            'steered_unknown': 'Steering unknown latent', 'orthogonalized_unknown': 'Orthogonalized model\nUnknown latent',
                                            'steered_known_random': 'Random steering\nKnown latent setting', 'steered_unknown_random': 'Random steering\nUnknown latent setting'}
@@ -138,10 +138,10 @@ def plot_counter_refusal(counter_refusal, save, **kwargs):
 
     fig.tight_layout()
     plt.ylim(0,100)
-    os.makedirs('./plots/refusal_analysis', exist_ok=True)
+    os.makedirs(f'./plots_{feature_type}/refusal_analysis', exist_ok=True)
     if save == True:
-        plt.savefig(f"./plots/refusal_analysis/v2_{kwargs['model_alias']}_k{kwargs['top_latents']['known']}_u{kwargs['top_latents']['unknown']}_{kwargs['pos_type']}_k{kwargs['coeff_values']['known']}_u{kwargs['coeff_values']['unknown']}_{kwargs['split']}_{kwargs['known_label']}.png", dpi=500, transparent=True)
-        plt.savefig(f"./plots/refusal_analysis/v2_{kwargs['model_alias']}_k{kwargs['top_latents']['known']}_u{kwargs['top_latents']['unknown']}_{kwargs['pos_type']}_k{kwargs['coeff_values']['known']}_u{kwargs['coeff_values']['unknown']}_{kwargs['split']}_{kwargs['known_label']}.pdf", transparent=True)
+        plt.savefig(f"./plots_{feature_type}/refusal_analysis/v2_{kwargs['model_alias']}_k{kwargs['top_latents']['known']}_u{kwargs['top_latents']['unknown']}_{kwargs['pos_type']}_k{kwargs['coeff_values']['known']}_u{kwargs['coeff_values']['unknown']}_{kwargs['split']}_{kwargs['known_label']}.png", dpi=500, transparent=True)
+        plt.savefig(f"./plots_{feature_type}/refusal_analysis/v2_{kwargs['model_alias']}_k{kwargs['top_latents']['known']}_u{kwargs['top_latents']['unknown']}_{kwargs['pos_type']}_k{kwargs['coeff_values']['known']}_u{kwargs['coeff_values']['unknown']}_{kwargs['split']}_{kwargs['known_label']}.pdf", transparent=True)
 
 def load_model(model_alias):
     model_alias = model_alias.replace('_','/')
@@ -222,12 +222,13 @@ batch_size = 100
 top_latents = {'known': 0, 'unknown': 0}
 coeff_values = {'known': 15, 'unknown': 20}
 split = 'test'
+feature_type = 'latents'
+assert feature_type in ["latents", "hidden"], feature_type
 
 categories = ['original', 'steered_unknown', 'steered_unknown_random', 'orthogonalized_unknown', 'steered_known', 'steered_known_random']
 # for idx in range(1,5):
-known_latent, unknown_latent, random_latents_known, random_latents_unknown = load_latents(model_alias, top_latents,
-                                                                                          random_n_latents=10,
-                                                                                          filter_with_pile=True)
+known_latent, unknown_latent, random_latents_known, random_latents_unknown = load_latents(model_alias, top_latents, feature_type=feature_type,
+                                                                                          random_n_latents=10, filter_with_pile=True)
 print(unknown_latent)
 print(known_latent)
 counter_refusal = {}
@@ -251,7 +252,7 @@ for e_idx, entity_type in enumerate(['player', 'city', 'movie', 'song']):
 
     if 'original' in categories:
         original_generations_full, known_steered_generations_full = steered_and_orig_generations(model, N, tokenized_prompts, pos_entities, pos_type=pos_type,
-                                                                                        steering_latents=known_latent, ablate_latents=None,
+                                                                                        steering_latents=known_latent, ablate_latents=None, feature_type=feature_type,
                                                                                         coeff_value=coeff_values['known'], max_new_tokens=max_new_tokens, batch_size=batch_size)
 
         counter_refusal[entity_type]['original'] = count_refusals(original_generations_full)
@@ -259,7 +260,7 @@ for e_idx, entity_type in enumerate(['player', 'city', 'movie', 'song']):
 
     if 'steered_unknown' in categories:
         _, unknown_steered_generations_full = steered_and_orig_generations(model, N, tokenized_prompts, pos_entities, pos_type=pos_type,
-                                                                                        steering_latents=unknown_latent, ablate_latents=None,
+                                                                                        steering_latents=unknown_latent, ablate_latents=None, feature_type=feature_type,
                                                                                         coeff_value=coeff_values['unknown'], max_new_tokens=max_new_tokens,
                                                                                         orig_generations=False, batch_size=batch_size)
         
@@ -269,7 +270,7 @@ for e_idx, entity_type in enumerate(['player', 'city', 'movie', 'song']):
         random_latents_counter = []
         for random_latent in random_latents_known:
             _, random_steered_generations_full = steered_and_orig_generations(model, N, tokenized_prompts, pos_entities, pos_type=pos_type,
-                                                                                        steering_latents=[random_latent], ablate_latents=None,
+                                                                                        steering_latents=[random_latent], ablate_latents=None, feature_type=feature_type,
                                                                                         coeff_value=coeff_values['known'], max_new_tokens=max_new_tokens,
                                                                                         orig_generations=False, batch_size=batch_size)
             
@@ -281,7 +282,7 @@ for e_idx, entity_type in enumerate(['player', 'city', 'movie', 'song']):
         random_latents_counter = []
         for random_latent in random_latents_unknown:
             _, random_steered_generations_full = steered_and_orig_generations(model, N, tokenized_prompts, pos_entities, pos_type=pos_type,
-                                                                                    steering_latents=[random_latent], ablate_latents=None,
+                                                                                    steering_latents=[random_latent], ablate_latents=None, feature_type=feature_type,
                                                                                     coeff_value=coeff_values['unknown'], max_new_tokens=max_new_tokens,
                                                                                     orig_generations=False, batch_size=batch_size)
             random_latents_counter.append(count_refusals(random_steered_generations_full))
@@ -289,6 +290,9 @@ for e_idx, entity_type in enumerate(['player', 'city', 'movie', 'song']):
         counter_refusal[entity_type]['steered_unknown_random'] = random_latents_counter
     
     if 'orthogonalized_unknown' in categories or 'orthogonalized_known' in categories:
+        if feature_type == "hidden":
+            raise NotImplementedError
+
         for ortho_idx, orhogonalization_type in enumerate(['unknown']):
             if orhogonalization_type == 'unknown':
                 direction = unknown_latent[0][-1]
@@ -316,12 +320,12 @@ for e_idx, entity_type in enumerate(['player', 'city', 'movie', 'song']):
     # torch.cuda.empty_cache()
 
 # Save counter_refusal results
-save_path = f'results/refusal_analysis/{model_alias}'
+save_path = f'results/refusal_analysis_{feature_type}/{model_alias}'
 os.makedirs(save_path, exist_ok=True)
 with open(os.path.join(save_path, f'counter_refusal_{entity_type}_{known_label}.json'), 'w') as f:
     json.dump(counter_refusal, f)
 
-plot_counter_refusal(counter_refusal, save=True,**params_args)
+plot_counter_refusal(counter_refusal, save=True, feature_type=feature_type, **params_args)
 
 
 
@@ -341,9 +345,8 @@ top_latents = {'known': 0, 'unknown': 0}
 coeff_values = {'known': 20, 'unknown': 20}
 model_alias = model_alias.replace('/','_')
 # %%
-known_latent, unknown_latent, random_latents_known, random_latents_unknown = load_latents(model_alias, top_latents,
-                                                                                          filter_with_pile=True,
-                                                                                          random_n_latents=10)
+known_latent, unknown_latent, random_latents_known, random_latents_unknown = load_latents(model_alias, top_latents, feature_type=feature_type,
+                                                                                          filter_with_pile=True, random_n_latents=10)
 # %%
 # unknown_latent = load_steering_latents('movie', label='unknown', topk=1,
 #                                         #layers_range=[unknown_latent[0]],
@@ -357,9 +360,11 @@ tokenized_prompts, pos_entities, formatted_instructions = tokenized_prompts_dict
 
 counter_refusals = {}
 
+if feature_type == "hidden":
+    raise NotImplementedError
 
 original_generations_full, steered_generations_full = steered_and_orig_generations(model, N, tokenized_prompts, pos_entities, pos_type='entity_last_to_end',
-                                                                                steering_latents=[random_latents_known[-2]], ablate_latents=None,
+                                                                                steering_latents=[random_latents_known[-2]], ablate_latents=None, feature_type=feature_type,
                                                                                 coeff_value=coeff_values['known'], max_new_tokens=max_new_tokens,
                                                                                 orig_generations=True, batch_size=batch_size)
 
@@ -371,7 +376,7 @@ counter_refusals['steered'] = count_refusals(steered_generations_full)
 # counter_refusals['steered_unknown_random'] = []
 # for random_latent in random_latents_known:
 #     _, random_steered_generations_full = steered_and_orig_generations(model, N, tokenized_prompts, pos_entities, pos_type='entity_last_to_end',
-#                                                                                 steering_latents=[random_latent], ablate_latents=None,
+#                                                                                 steering_latents=[random_latent], ablate_latents=None, feature_type=feature_type,
 #                                                                                 coeff_value=coeff_values['known'], max_new_tokens=max_new_tokens,
 #                                                                                 orig_generations=False, batch_size=batch_size)
 
@@ -379,7 +384,7 @@ counter_refusals['steered'] = count_refusals(steered_generations_full)
 
 # for random_latent in random_latents_unknown:
 #     _, random_steered_generations_full = steered_and_orig_generations(model, N, tokenized_prompts, pos_entities, pos_type='entity_last_to_end',
-#                                                                                 steering_latents=[random_latent], ablate_latents=None,
+#                                                                                 steering_latents=[random_latent], ablate_latents=None, feature_type=feature_type,
 #                                                                                 coeff_value=coeff_values['unknown'], max_new_tokens=max_new_tokens,
 #                                                                                 orig_generations=False, batch_size=batch_size)
 

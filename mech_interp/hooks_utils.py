@@ -78,7 +78,11 @@ def ablate_sae_latents(activation, hook, direction, pos):
         return activation
 
 
-def generation_steered_latents(model, ids, pos, steering_latents=None, ablate_latents=None, coeff_value=1, max_new_tokens=30):
+def generation_steered_latents(model, ids, pos, steering_latents=None, ablate_latents=None, feature_type='latents', coeff_value=1, max_new_tokens=30):
+    assert feature_type in ["latents", "hidden"], feature_type
+    if feature_type == "hidden":
+        raise NotImplementedError
+
     if steering_latents is not None:
         # TODO: change this
         steer_fwd_hooks = [(f"blocks.{layer}.hook_resid_pre", partial(steer_sae_latents,
@@ -201,7 +205,8 @@ def get_batch_pos(batch_entity_pos, pos_type, tokenized_prompts):
 
     return batch_pos
             
-def steered_and_orig_generations(model, N, tokenized_prompts, pos_entities, pos_type: Literal['all', 'entity', 'entity_last', 'entity_and_eoi', 'entity_to_end', 'entity_last_to_end']='all', steering_latents=None, ablate_latents=None, coeff_value=100, max_new_tokens=30, orig_generations=True, batch_size=4):
+def steered_and_orig_generations(model, N, tokenized_prompts, pos_entities, pos_type: Literal['all', 'entity', 'entity_last', 'entity_and_eoi', 'entity_to_end', 'entity_last_to_end']='all',
+                                 steering_latents=None, ablate_latents=None, feature_type='latents', coeff_value=100, max_new_tokens=30, orig_generations=True, batch_size=4):
 
     original_generations_full = []
     steered_generations_full = []
@@ -228,6 +233,7 @@ def steered_and_orig_generations(model, N, tokenized_prompts, pos_entities, pos_
         steered_generations = generation_steered_latents(model, batch_tokenized_prompts, pos=batch_pos,
                                             steering_latents=steering_latents,
                                             ablate_latents=ablate_latents,
+                                            feature_type=feature_type,
                                             coeff_value=coeff_value,
                                             max_new_tokens=max_new_tokens)
         steered_generations_full.extend(steered_generations)
