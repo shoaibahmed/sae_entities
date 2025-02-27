@@ -211,11 +211,11 @@ def scatter_plot_latent_separation_scores_experiment(model_alias, tokenizer, ent
     test_final_feats_dict = get_top_k_features(test_feats_layers, k=None)
 
     # we always save scatter plots
-    fig = plot_all_features(test_final_feats_dict, train_feats_dict, entity_type, k=10, labels=False)
+    fig = plot_all_features(test_final_feats_dict, train_feats_dict, entity_type, k=10, labels=False, feature_type=feature_type)
     os.makedirs(f'./plots_{feature_type}/scatter_plots', exist_ok=True)
     fig.savefig(f'./plots_{feature_type}/scatter_plots/{model_alias}_feature_activation_frequencies_smaller_{entity_type}_{str(testing_layers)}.png', transparent=True)
     fig.savefig(f'./plots_{feature_type}/scatter_plots/{model_alias}_feature_activation_frequencies_smaller_{entity_type}_{str(testing_layers)}.pdf', transparent=True)
-    fig.show()
+    # fig.show()
 
 ### Searching for the top general latents ###
 def get_general_latents(model_alias, entity_types, testing_layers, tokens_to_cache, evaluate_on, scoring_method, filter_with_pile=False,
@@ -359,7 +359,7 @@ def get_layerwise_latent_scores(model_alias, sae_layers, tokens_to_cache, scorin
 
 
 def plot_layerwise_latent_scores(model_alias, sae_layers, top_scores_layers, minmax_layerwise_scores, known_label, top_k, feature_type='latents'):
-
+    assert feature_type in ["latents", "hidden"], feature_type
     entity_types = list(top_scores_layers[known_label].keys())
     colors = [html_colors['blue_drawio'], html_colors['grey_drawio'], html_colors['green_drawio'], html_colors['brown_D3']]  # Add more colors if needed
     final_scores = list(minmax_layerwise_scores[known_label].values())
@@ -411,9 +411,16 @@ def plot_layerwise_latent_scores(model_alias, sae_layers, top_scores_layers, min
         # )
     )
 
+    base_text = f'Top {top_k} {known_label.capitalize()} Separation Scores'
+    if feature_type == "latents":
+        title = f'{base_text} Latents'
+    else:
+        assert feature_type == "hidden", feature_type
+        title = f'{base_text} Hidden Rep'
+
     fig.update_layout(
         title={
-            'text': f'Top {top_k} {known_label.capitalize()} Separation Scores Latents',
+            'text': title,
             'y': 0.75,  # Moves the title closer to the plot (default is 0.9)
             'x': 0.5,
             'xanchor': 'center',
@@ -423,6 +430,7 @@ def plot_layerwise_latent_scores(model_alias, sae_layers, top_scores_layers, min
 
     fig.update_xaxes(tickmode='linear', tick0=1, dtick=1)
     fig.update_layout(showlegend=True)
+    fig.update_yaxes(range=[0.0, 1.0])
 
     # Update x-axis limits
     fig.update_xaxes(range=[0.5, len(sae_layers)+1-0.5])
@@ -441,4 +449,4 @@ def plot_layerwise_latent_scores(model_alias, sae_layers, top_scores_layers, min
     pio.write_image(fig, f'plots_{feature_type}/layerwise_evolution/{model_alias}_entities_top_scores_layers_{known_label}.pdf',
                         scale=10, width=500, height=315)# width=475, height=300
 
-    fig.show()
+    # fig.show()

@@ -855,9 +855,10 @@ def plot_top_k_features(final_feats_dict, entity_type):
     plt.title(f'Feature Activation Frequencies: Known vs Unknown, Entity: {entity_type}')
 
 
-def plot_all_features(final_feats_dict, train_feats_dict, entity_type, k=10, labels=True):
+def plot_all_features(final_feats_dict, train_feats_dict, entity_type, k=10, labels=True, feature_type='latents'):
     from matplotlib import patches
     # final_feats_dict -> {'L2F3214' : [x, y] ...} with top k known and unknown features
+    assert feature_type in ["latents", "hidden"], feature_type
 
     plt.figure(figsize=(4.5, 4.5), dpi=500)
 
@@ -905,7 +906,12 @@ def plot_all_features(final_feats_dict, train_feats_dict, entity_type, k=10, lab
     # Add labels and title
     plt.xlabel('Activation Frequency Known Entities (%)', fontsize=10)
     plt.ylabel('Activation Frequency Unknown Entities (%)', fontsize=10)
-    plt.title(f'Activation Frequencies of SAE Latents: {entity_type.capitalize()}', fontsize=10)
+    if feature_type == "latents":
+        base_text = "Activation Frequencies of SAE Latents"
+    else:
+        assert feature_type == "hidden", feature_type
+        base_text = "Activation Frequencies of Model Representations"
+    plt.title(f'{base_text}: {entity_type.capitalize()}', fontsize=10)
     return plt
 
 ## Plot functions
