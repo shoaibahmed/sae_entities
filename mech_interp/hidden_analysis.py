@@ -56,6 +56,7 @@ pile_prompts_experiment = {
     }
 
 feature_type = 'hidden'  # can also be 'latents'
+assert feature_type in ["latents", "hidden"], feature_type
 get_per_layer_latent_scores(model_alias, tokenizer, n_layers, d_model, LAYERS_WITH_SAE,
                             feature_type=feature_type, save=True, **pile_prompts_experiment)
 
@@ -99,8 +100,9 @@ evaluate_on = 'entities' # prompts or entities
 scoring_method = 'absolute_difference' # 'absolute_difference', 'relative_difference', 't_test'
 testing_layers = LAYERS_WITH_SAE
 entity_types = ALL_ENTITY_TYPES
-get_general_latents(model_alias, entity_types, testing_layers, tokens_to_cache, evaluate_on,
-                    scoring_method, filter_with_pile=True, feature_type=feature_type)
+for filter_with_pile in [True, False]:  # saving the output without filter with pile option is important for refusal analysis
+    get_general_latents(model_alias, entity_types, testing_layers, tokens_to_cache, evaluate_on,
+                        scoring_method, filter_with_pile=filter_with_pile, feature_type=feature_type)
 
 # %%
 #### Layerwise Latent Scores Analysis ####
