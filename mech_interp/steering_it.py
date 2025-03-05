@@ -128,10 +128,13 @@ batch_size = 16
 top_latents = {'known': 0, 'unknown': 0}
 coeff_values = {'known': 15, 'unknown': 20}
 split = 'test'
+feature_type = 'latents'
+assert feature_type in ["latents", "hidden"], feature_type
 
 
 # %%
 known_latent, unknown_latent, random_latents_known, random_latents_unknown = load_latents(model_alias, top_latents,
+                                                                                          feature_type=feature_type,
                                                                                           filter_with_pile=True,
                                                                                           random_n_latents=5)
 
@@ -142,8 +145,9 @@ tokenized_prompts, pos_entities, formatted_instructions = tokenized_prompts_dict
 
 original_generations_full, steered_generations_full = steered_and_orig_generations(model, N, tokenized_prompts, pos_entities, pos_type='entity_last',
                                                                                 steering_latents=unknown_latent, ablate_latents=None,
-                                                                                coeff_value=coeff_values['unknown'], max_new_tokens=max_new_tokens,
-                                                                                orig_generations=True, batch_size=batch_size)
+                                                                                feature_type=feature_type, coeff_value=coeff_values['unknown'],
+                                                                                max_new_tokens=max_new_tokens, orig_generations=True,
+                                                                                batch_size=batch_size)
 
 
 for i in range(len(original_generations_full)):
@@ -238,8 +242,11 @@ metric = 'logit_diff'
 
 # %%
 known_latent, unknown_latent, random_latents_known, random_latents_unknown = load_latents(model_alias, top_latents,
+                                                                                          feature_type=feature_type,
                                                                                           filter_with_pile=True,
                                                                                           random_n_latents=5)
+if feature_type == "hidden":
+    raise NotImplementedError
 
 # %%
 for known_label in ['known','unknown']:

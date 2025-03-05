@@ -266,7 +266,7 @@ for e_idx, entity_type in enumerate(['player', 'city', 'movie', 'song']):
         
         counter_refusal[entity_type]['steered_unknown'] = count_refusals(unknown_steered_generations_full)
 
-    if 'steered_known_random' in categories:
+    if 'steered_known_random' in categories and random_latents_known is not None:
         random_latents_counter = []
         for random_latent in random_latents_known:
             _, random_steered_generations_full = steered_and_orig_generations(model, N, tokenized_prompts, pos_entities, pos_type=pos_type,
@@ -278,7 +278,7 @@ for e_idx, entity_type in enumerate(['player', 'city', 'movie', 'song']):
 
         counter_refusal[entity_type]['steered_known_random'] = random_latents_counter
 
-    if 'steered_unknown_random' in categories:
+    if 'steered_unknown_random' in categories and random_latents_unknown is not None:
         random_latents_counter = []
         for random_latent in random_latents_unknown:
             _, random_steered_generations_full = steered_and_orig_generations(model, N, tokenized_prompts, pos_entities, pos_type=pos_type,
@@ -359,9 +359,6 @@ known_latent, unknown_latent, random_latents_known, random_latents_unknown = loa
 tokenized_prompts, pos_entities, formatted_instructions = tokenized_prompts_dict_entity_type[entity_type][known_label], pos_entities_dict_entity_type[entity_type][known_label], formatted_instructions_dict_entity_type[entity_type][known_label]
 
 counter_refusals = {}
-
-if feature_type == "hidden":
-    raise NotImplementedError
 
 original_generations_full, steered_generations_full = steered_and_orig_generations(model, N, tokenized_prompts, pos_entities, pos_type='entity_last_to_end',
                                                                                 steering_latents=[random_latents_known[-2]], ablate_latents=None, feature_type=feature_type,

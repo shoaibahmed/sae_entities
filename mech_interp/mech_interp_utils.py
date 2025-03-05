@@ -1567,16 +1567,18 @@ def load_latents(model_alias, top_latents, feature_type='latents', filter_with_p
                                                                             random_latents=False,
                                                                             feature_type=feature_type)
 
+    use_random_latents = True if feature_type == "latents" else False if feature_type == "hidden" else None
+    assert use_random_latents is not None
     random_latents_known: List[Tuple[int, float, Tensor]] = load_steering_latents('movie', label='known', topk=kwargs['random_n_latents'],
                                                                               layers_range=[layer_known],
                                                                               model_alias=model_alias,
-                                                                              random_latents=True,
+                                                                              random_latents=use_random_latents,
                                                                               feature_type=feature_type)
     
     random_latents_unknown: List[Tuple[int, float, Tensor]] = load_steering_latents('movie', label='unknown', topk=kwargs['random_n_latents'],
                                                                               layers_range=[layer_unknown],
                                                                               model_alias=model_alias,
-                                                                              random_latents=True,
+                                                                              random_latents=use_random_latents,
                                                                               feature_type=feature_type)
     
     return known_latent, unknown_latent, random_latents_known, random_latents_unknown
