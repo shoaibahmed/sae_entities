@@ -322,7 +322,7 @@ for e_idx, entity_type in enumerate(['player', 'city', 'movie', 'song']):
 # Save counter_refusal results
 save_path = f'results/refusal_analysis_{feature_type}/{model_alias}'
 os.makedirs(save_path, exist_ok=True)
-with open(os.path.join(save_path, f'counter_refusal_{entity_type}_{known_label}.json'), 'w') as f:
+with open(os.path.join(save_path, f'counter_refusal_{known_label}.json'), 'w') as f:
     json.dump(counter_refusal, f)
 
 plot_counter_refusal(counter_refusal, save=True, feature_type=feature_type, **params_args)
