@@ -220,7 +220,7 @@ N=100
 max_new_tokens = 30
 batch_size = 100
 top_latents = {'known': 0, 'unknown': 0}
-coeff_values = {'known': 15, 'unknown': 20}
+coeff_values = {'known': 400, 'unknown': 400}
 split = 'test'
 feature_type = 'latents'
 assert feature_type in ["latents", "hidden"], feature_type
