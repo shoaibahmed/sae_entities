@@ -1553,7 +1553,7 @@ def load_latents(model_alias, top_latents, feature_type='latents', filter_with_p
     head_unknown = int(unknown_latent_[unknown_latent_.find('F')+1:-2])
     unknown_latent_id = [(layer_unknown, head_unknown)]
 
-    known_latent: List[Tuple[int, float, Tensor]] = load_steering_latents('movie', label='unknown', topk=1,
+    known_latent: List[Tuple[int, float, Tensor]] = load_steering_latents('movie', label='known', topk=1,
                                                                             #layers_range=[known_latent[0]],
                                                                             specific_latents=known_latent_id,
                                                                             model_alias=model_alias,
