@@ -1553,14 +1553,15 @@ def load_latents(model_alias, top_latents, feature_type='latents', filter_with_p
     head_unknown = int(unknown_latent_[unknown_latent_.find('F')+1:-2])
     unknown_latent_id = [(layer_unknown, head_unknown)]
 
-    known_latent: List[Tuple[int, float, Tensor]] = load_steering_latents('movie', label='known', topk=1,
+    # layer, latent_idx, mean_act, direction
+    known_latent: List[Tuple[int, int, float, Tensor]] = load_steering_latents('movie', label='known', topk=1,
                                                                             #layers_range=[known_latent[0]],
                                                                             specific_latents=known_latent_id,
                                                                             model_alias=model_alias,
                                                                             random_latents=False,
                                                                             feature_type=feature_type)
 
-    unknown_latent: List[Tuple[int, float, Tensor]] = load_steering_latents('movie', label='unknown', topk=1,
+    unknown_latent: List[Tuple[int, int, float, Tensor]] = load_steering_latents('movie', label='unknown', topk=1,
                                                                             #layers_range=[unknown_latent[0]],
                                                                             specific_latents=unknown_latent_id,
                                                                             model_alias=model_alias,
@@ -1569,13 +1570,13 @@ def load_latents(model_alias, top_latents, feature_type='latents', filter_with_p
 
     use_random_latents = True if feature_type == "latents" else False if feature_type == "hidden" else None
     assert use_random_latents is not None
-    random_latents_known: List[Tuple[int, float, Tensor]] = load_steering_latents('movie', label='known', topk=kwargs['random_n_latents'],
+    random_latents_known: List[Tuple[int, int, float, Tensor]] = load_steering_latents('movie', label='known', topk=kwargs['random_n_latents'],
                                                                               layers_range=[layer_known],
                                                                               model_alias=model_alias,
                                                                               random_latents=use_random_latents,
                                                                               feature_type=feature_type)
     
-    random_latents_unknown: List[Tuple[int, float, Tensor]] = load_steering_latents('movie', label='unknown', topk=kwargs['random_n_latents'],
+    random_latents_unknown: List[Tuple[int, int, float, Tensor]] = load_steering_latents('movie', label='unknown', topk=kwargs['random_n_latents'],
                                                                               layers_range=[layer_unknown],
                                                                               model_alias=model_alias,
                                                                               random_latents=use_random_latents,
