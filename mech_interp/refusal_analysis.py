@@ -290,25 +290,51 @@ for e_idx, entity_type in enumerate(['player', 'city', 'movie', 'song']):
         counter_refusal[entity_type]['steered_unknown_random'] = random_latents_counter
     
     if 'orthogonalized_unknown' in categories or 'orthogonalized_known' in categories:
-        if feature_type == "hidden":
-            raise NotImplementedError
-
         for ortho_idx, orhogonalization_type in enumerate(['unknown']):
-            if orhogonalization_type == 'unknown':
-                direction = unknown_latent[0][-1]
-            else:
-                direction = known_latent[0][-1]
-            if ortho_idx == 1:
-                # Load model again
-                model, tokenizer = load_model(model_alias)
-            
-            tl_orthogonalize_gemma_weights(model, direction=direction)
+            if feature_type == "hidden":
+                # For hidden features, we need to create projection matrices similar to tl_orthogonalize_gemma_weights
+                # but using a one-hot vector approach
+                if orhogonalization_type == 'unknown':
+                    # Get the layer and dimension index from unknown_latent
+                    layer, dimension_idx = unknown_latent[0][0], unknown_latent[0][1]
+                else:
+                    # Get the layer and dimension index from known_latent
+                    layer, dimension_idx = known_latent[0][0], known_latent[0][1]
 
-            # Run generations with orthogonalized model
-            orthogonalized_generations_full = run_generations(model, N, tokenized_prompts, max_new_tokens, batch_size)
-            torch.cuda.empty_cache()
+                if ortho_idx == 1:
+                    # Load model again
+                    model, tokenizer = load_model(model_alias)
 
-            counter_refusal[entity_type][f'orthogonalized_{orhogonalization_type}'] = count_refusals(orthogonalized_generations_full)
+                # Create a one-hot direction vector
+                d_model = model.cfg.d_model
+                direction = torch.zeros((d_model,), dtype=torch.float32, device=model.device)
+                direction[dimension_idx] = 1.0
+
+                # Now use this direction with the same orthogonalization function for consistency
+                tl_orthogonalize_gemma_weights(model, direction=direction)
+
+                # Run generations with orthogonalized model
+                orthogonalized_generations_full = run_generations(model, N, tokenized_prompts, max_new_tokens, batch_size)
+                torch.cuda.empty_cache()
+
+                counter_refusal[entity_type][f'orthogonalized_{orhogonalization_type}'] = count_refusals(orthogonalized_generations_full)
+
+            else:  # feature_type == "latents"
+                if orhogonalization_type == 'unknown':
+                    direction = unknown_latent[0][-1]
+                else:
+                    direction = known_latent[0][-1]
+                if ortho_idx == 1:
+                    # Load model again
+                    model, tokenizer = load_model(model_alias)
+
+                tl_orthogonalize_gemma_weights(model, direction=direction)
+
+                # Run generations with orthogonalized model
+                orthogonalized_generations_full = run_generations(model, N, tokenized_prompts, max_new_tokens, batch_size)
+                torch.cuda.empty_cache()
+
+                counter_refusal[entity_type][f'orthogonalized_{orhogonalization_type}'] = count_refusals(orthogonalized_generations_full)
 
             del model
         gc.collect()

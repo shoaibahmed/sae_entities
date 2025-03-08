@@ -245,8 +245,6 @@ known_latent, unknown_latent, random_latents_known, random_latents_unknown = loa
                                                                                           feature_type=feature_type,
                                                                                           filter_with_pile=True,
                                                                                           random_n_latents=5)
-if feature_type == "hidden":
-    raise NotImplementedError
 
 # %%
 for known_label in ['known','unknown']:
@@ -270,12 +268,14 @@ for known_label in ['known','unknown']:
         print('RANDOM STEERING LATENTS')
         rdm_steered_result = compute_logit_diff_steered(model, N, tokenized_prompts, metric, pos_entities, pos_type=pos_type,
                                                         steering_latents=[random_latents_unknown[0]], ablate_latents=None,
-                                                        coeff_value=coeff_values[complement_known_label], batch_size=batch_size)
+                                                        coeff_value=coeff_values[complement_known_label], batch_size=batch_size,
+                                                        feature_type=feature_type)
         
         print('STEERING LATENTS')
         steered_result = compute_logit_diff_steered(model, N, tokenized_prompts, metric, pos_entities, pos_type=pos_type,
                                                         steering_latents=steering_latents, ablate_latents=None,
-                                                        coeff_value=coeff_values[complement_known_label], batch_size=batch_size)
+                                                        coeff_value=coeff_values[complement_known_label], batch_size=batch_size,
+                                                        feature_type=feature_type)
         
         if metric != 'logit_diff':
             if token_check == 'yes':
