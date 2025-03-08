@@ -307,7 +307,7 @@ for e_idx, entity_type in enumerate(['player', 'city', 'movie', 'song']):
 
                 # Create a one-hot direction vector
                 d_model = model.cfg.d_model
-                direction = torch.zeros((d_model,), dtype=torch.float32, device=model.device)
+                direction = torch.zeros((d_model,), dtype=torch.float32)
                 direction[dimension_idx] = 1.0
 
                 # Now use this direction with the same orthogonalization function for consistency
