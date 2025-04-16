@@ -78,54 +78,180 @@ def ablate_sae_latents(activation, hook, direction, pos):
         return activation
 
 
+def steer_hidden_dimension(activation, hook, dimension_idx, pos, coeff_value=1):
+    """
+    Steers a specific dimension in the hidden state.
+
+    Args:
+        activation: The activation tensor (batch, seq_len, d_model)
+        hook: The hook context
+        dimension_idx: Index of the hidden dimension to steer
+        pos: Positions to apply steering at
+        coeff_value: Value to add to the dimension or 'norm' for norm-based steering
+
+    Returns:
+        Modified activation tensor
+    """
+    if activation.shape[1] == 1:  # generating
+        return activation
+
+    # Create a one-hot direction vector for the specified dimension
+    d_model = activation.shape[-1]
+    direction = torch.zeros((d_model,), dtype=activation.dtype, device=activation.device)
+    direction[dimension_idx] = 1.0
+
+    # Now use the same logic as steer_sae_latents for consistency
+    if pos != 'all':
+        if coeff_value == 'norm':
+            if isinstance(pos[0], list):
+                for batch_idx, p in enumerate(pos):
+                    norm_res_streams = torch.norm(activation[batch_idx, p, :], dim=-1)
+                    activation[batch_idx, p, :] += direction.unsqueeze(0) * norm_res_streams.unsqueeze(-1)
+            else:
+                norm_res_streams = torch.norm(activation[:, pos, :], dim=-1)
+                activation[:, pos, :] += direction.unsqueeze(0) * norm_res_streams.unsqueeze(-1)
+        else:
+            if isinstance(pos[0], list):
+                for batch_idx, p in enumerate(pos):
+                    activation[batch_idx, p, :] += direction.unsqueeze(0) * coeff_value
+            else:
+                activation[:, pos, :] += direction.unsqueeze(0) * coeff_value
+    else:
+        # All positions at once
+        if coeff_value == 'norm':
+            norm_res_streams = torch.norm(activation[:, :, :], dim=-1)
+            activation[:, :, :] += direction.unsqueeze(0) * norm_res_streams.unsqueeze(-1)
+        else:
+            activation[:, :, :] += direction.unsqueeze(0) * coeff_value
+
+    return activation
+
+def ablate_hidden_dimension(activation, hook, dimension_idx, pos):
+    """
+    Ablates a specific dimension in the hidden state.
+
+    Args:
+        activation: The activation tensor (batch, seq_len, d_model)
+        hook: The hook context
+        dimension_idx: Index of the hidden dimension to ablate
+        pos: Positions to apply ablation at
+
+    Returns:
+        Modified activation tensor
+    """
+    if activation.shape[1] == 1:  # generating
+        return activation
+
+    # Create a one-hot direction vector for the specified dimension
+    d_model = activation.shape[-1]
+    direction = torch.zeros((d_model,), dtype=activation.dtype, device=activation.device)
+    direction[dimension_idx] = 1.0
+
+    # Now use the same projection logic as ablate_sae_latents
+    if pos != 'all':
+        if isinstance(pos[0], list):
+            for batch_idx, p in enumerate(pos):
+                activation[batch_idx, p, :] -= (activation[batch_idx, p, :] @ direction.unsqueeze(-1)) * direction
+        else:
+            activation[:, pos, :] -= (activation[:, pos, :] @ direction.unsqueeze(-1)) * direction
+    else:
+        activation[:, :, :] -= (activation[:, :, :] @ direction.unsqueeze(-1)) * direction
+
+    return activation
+
 def generation_steered_latents(model, ids, pos, steering_latents=None, ablate_latents=None, feature_type='latents', coeff_value=1, max_new_tokens=30):
     assert feature_type in ["latents", "hidden"], feature_type
-    if feature_type == "hidden":
-        raise NotImplementedError
 
     if steering_latents is not None:
-        # TODO: change this
-        steer_fwd_hooks = [(f"blocks.{layer}.hook_resid_pre", partial(steer_sae_latents,
+        if feature_type == "latents":
+            # For latent features, use the provided direction vectors
+            steer_fwd_hooks = [(f"blocks.{layer}.hook_resid_pre", partial(steer_sae_latents,
                                                 pos=pos,
                                                 direction=direction,
                                                 coeff_value=coeff_value))
-                            for layer, latent_idx, mean_act, direction in steering_latents]
+                              for layer, latent_idx, mean_act, direction in steering_latents]
+        else:  # feature_type == "hidden"
+            # For hidden features, create hooks that use the steer_hidden_dimension function
+            steer_fwd_hooks = [(f"blocks.{layer}.hook_resid_pre", partial(steer_hidden_dimension,
+                                                dimension_idx=latent_idx,
+                                                pos=pos,
+                                                coeff_value=coeff_value))
+                              for layer, latent_idx, mean_act, direction in steering_latents]
     else:
         steer_fwd_hooks = []
 
     if ablate_latents is not None:
-        ablate_fwd_hooks = [(f"blocks.{layer}.hook_resid_pre", partial(ablate_sae_latents,
+        if feature_type == "latents":
+            # For latent features, project away the direction
+            ablate_fwd_hooks = [(f"blocks.{layer}.hook_resid_pre", partial(ablate_sae_latents,
                                                 pos=pos,
                                                 direction=direction))
-                            for layer, latent_idx, mean_act, direction in ablate_latents]
+                               for layer, latent_idx, mean_act, direction in ablate_latents]
+        else:  # feature_type == "hidden"
+            # For hidden features, use the ablate_hidden_dimension function
+            ablate_fwd_hooks = [(f"blocks.{layer}.hook_resid_pre", partial(ablate_hidden_dimension,
+                                             dimension_idx=latent_idx,
+                                             pos=pos))
+                               for layer, latent_idx, mean_act, direction in ablate_latents]
     else:
         ablate_fwd_hooks = []
-    
+
     for hook_filter, hook_fn in steer_fwd_hooks:
         model.add_hook(hook_filter, hook_fn, "fwd")
 
     for hook_filter, hook_fn in ablate_fwd_hooks:
         model.add_hook(hook_filter, hook_fn, "fwd")
+
     generations = model.generate(ids, max_new_tokens=max_new_tokens, do_sample=False)
     steered_generations = [model.to_string(generation) for generation in generations]
     return steered_generations
 
-def cache_steered_latents(model, ids, pos, steering_latents: List[Tuple[int, float, Tensor]]=None, ablate_latents: List[Tuple[int, float, Tensor]]=None, coeff_value=1):
+def cache_steered_latents(model, ids, pos, steering_latents: List[Tuple[int, float, Tensor]]=None,
+                    ablate_latents: List[Tuple[int, float, Tensor]]=None, coeff_value=1, feature_type='latents'):
+    """
+    Run forward pass with caching while applying steering or ablation to hidden states.
+
+    Args:
+        model: The transformer model
+        ids: Input token IDs
+        pos: Positions to apply steering/ablation
+        steering_latents: List of latents to steer
+        ablate_latents: List of latents to ablate
+        coeff_value: Coefficient value or 'mean'/'norm'
+        feature_type: 'latents' or 'hidden'
+
+    Returns:
+        Model output and cache
+    """
+    assert feature_type in ["latents", "hidden"], feature_type
         
     if steering_latents is not None:
-        steer_fwd_hooks = [(f"blocks.{layer}.hook_resid_pre", partial(steer_sae_latents,
+        if feature_type == "latents":
+            steer_fwd_hooks = [(f"blocks.{layer}.hook_resid_pre", partial(steer_sae_latents,
                                                 pos=pos,
                                                 direction=direction,
                                                 coeff_value=mean_act if coeff_value == 'mean' else coeff_value))
-                            for layer, latent_idx, mean_act, direction in steering_latents]
+                              for layer, latent_idx, mean_act, direction in steering_latents]
+        else:  # feature_type == "hidden"
+            steer_fwd_hooks = [(f"blocks.{layer}.hook_resid_pre", partial(steer_hidden_dimension,
+                                                dimension_idx=latent_idx,
+                                                pos=pos,
+                                                coeff_value=mean_act if coeff_value == 'mean' else coeff_value))
+                              for layer, latent_idx, mean_act, direction in steering_latents]
     else:
         steer_fwd_hooks = []
 
     if ablate_latents is not None:
-        ablate_fwd_hooks = [(f"blocks.{layer}.hook_resid_pre", partial(ablate_sae_latents,
+        if feature_type == "latents":
+            ablate_fwd_hooks = [(f"blocks.{layer}.hook_resid_pre", partial(ablate_sae_latents,
                                                 pos=pos,
                                                 direction=direction))
-                            for layer, latent_idx, mean_act, direction in ablate_latents]
+                               for layer, latent_idx, mean_act, direction in ablate_latents]
+        else:  # feature_type == "hidden"
+            ablate_fwd_hooks = [(f"blocks.{layer}.hook_resid_pre", partial(ablate_hidden_dimension,
+                                                dimension_idx=latent_idx,
+                                                pos=pos))
+                               for layer, latent_idx, mean_act, direction in ablate_latents]
     else:
         ablate_fwd_hooks = []
     
@@ -134,6 +260,7 @@ def cache_steered_latents(model, ids, pos, steering_latents: List[Tuple[int, flo
 
     for hook_filter, hook_fn in ablate_fwd_hooks:
         model.add_hook(hook_filter, hook_fn, "fwd")
+
     output = model.run_with_cache(ids, return_type="logits")
     return output
 
@@ -276,7 +403,7 @@ def compute_logit_diff_original(model, N, tokenized_prompts, metric: Literal['lo
     return torch.cat(result_metric_full)
 
 
-def compute_logit_diff_steered(model, N, tokenized_prompts, metric: Literal['logit_diff', 'logprob', 'prob'], pos_entities, pos_type: Literal['all', 'entity', 'entity_last', 'entity_and_eoi']='all', steering_latents=None, ablate_latents=None, coeff_value=Union[Literal['norm', 'mean'], int], batch_size=4):
+def compute_logit_diff_steered(model, N, tokenized_prompts, metric: Literal['logit_diff', 'logprob', 'prob'], pos_entities, pos_type: Literal['all', 'entity', 'entity_last', 'entity_and_eoi']='all', steering_latents=None, ablate_latents=None, coeff_value=Union[Literal['norm', 'mean'], int], batch_size=4, feature_type='latents'):
     # Logit diff with steered (or ablated) latents
 
     steered_logit_diff_full = []
@@ -296,7 +423,8 @@ def compute_logit_diff_steered(model, N, tokenized_prompts, metric: Literal['log
         steered_logits, steered_cache = cache_steered_latents(model, batch_tokenized_prompts, pos=batch_pos,
                                                 steering_latents=steering_latents,
                                                 ablate_latents=ablate_latents,
-                                                coeff_value=coeff_value)
+                                                coeff_value=coeff_value,
+                                                feature_type=feature_type)
         
         steered_logit_diff_full.append(compute_metric(model, steered_logits, metric=metric))
         del steered_logits,steered_cache

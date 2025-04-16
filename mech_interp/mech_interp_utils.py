@@ -386,7 +386,7 @@ def load_steering_latents(
 
     if random_latents:
         print('Loading random latents')
-        
+
     # Read top features
     # TODO: make this dynamic if we change model
     sae_width = '16k'
@@ -423,7 +423,7 @@ def load_steering_latents(
         #     available_indices.remove(top_indices)
         # Remove indices of latents with score > 0
 
-        min_max_scores = json.load(open(f"./train_latents_layers_entities/absolute_difference/{model_alias.split('/')[-1]}/entity/sorted_scores_min_{label}.json"))
+        min_max_scores = json.load(open(f"./train_{feature_type}_layers_entities/absolute_difference/{model_alias.split('/')[-1]}/entity/sorted_scores_min_{label}.json"))
         for idx in all_sae_latents_dict[label].keys():
             latent_id = f"L{all_sae_latents_dict[label][idx]['layer']}F{all_sae_latents_dict[label][idx]['latent_idx']}"
             if abs(min_max_scores[latent_id]) > 0.0:
@@ -465,14 +465,22 @@ def load_steering_latents(
         else:
             sae_id = f"layer_{layer-1}/width_{sae_width}/average_l0_{str(layer_sparisity_widths[model_alias][layer-1][sae_width])}"
         sae = load_sae(repo_id, sae_id)
+        layer_feature_dim = sae.W_enc.shape[0]
+
         for latent_info in top_sae_latents:
             if latent_info['layer'] == layer:
                 latent_idx = latent_info['latent_idx']
                 mean_act = latent_info['mean_act']
-                if input_latent:
-                    direction = sae.W_enc[:,latent_idx].detach()#.cpu()
+                if feature_type == "hidden":
+                    assert not input_latent, "Input latent arg has no meaning for hidden feature type -- leave it as default"
+                    direction = torch.zeros((layer_feature_dim,), dtype=torch.float32)  # vector of all zeros
+                    direction[latent_idx] = 1.  # one-hot vector for intervention
                 else:
-                    direction = sae.W_dec[latent_idx].detach()#.cpu()
+                    assert feature_type == "latents", feature_type
+                    if input_latent:
+                        direction = sae.W_enc[:,latent_idx].detach()#.cpu()
+                    else:
+                        direction = sae.W_dec[latent_idx].detach()#.cpu()
                 latents.append((layer, latent_idx, mean_act, direction))
         del sae
 
@@ -1545,30 +1553,33 @@ def load_latents(model_alias, top_latents, feature_type='latents', filter_with_p
     head_unknown = int(unknown_latent_[unknown_latent_.find('F')+1:-2])
     unknown_latent_id = [(layer_unknown, head_unknown)]
 
-    known_latent: List[Tuple[int, float, Tensor]] = load_steering_latents('movie', label='unknown', topk=1,
+    # layer, latent_idx, mean_act, direction
+    known_latent: List[Tuple[int, int, float, Tensor]] = load_steering_latents('movie', label='known', topk=1,
                                                                             #layers_range=[known_latent[0]],
                                                                             specific_latents=known_latent_id,
                                                                             model_alias=model_alias,
                                                                             random_latents=False,
                                                                             feature_type=feature_type)
 
-    unknown_latent: List[Tuple[int, float, Tensor]] = load_steering_latents('movie', label='unknown', topk=1,
+    unknown_latent: List[Tuple[int, int, float, Tensor]] = load_steering_latents('movie', label='unknown', topk=1,
                                                                             #layers_range=[unknown_latent[0]],
                                                                             specific_latents=unknown_latent_id,
                                                                             model_alias=model_alias,
                                                                             random_latents=False,
                                                                             feature_type=feature_type)
 
-    random_latents_known: List[Tuple[int, float, Tensor]] = load_steering_latents('movie', label='known', topk=kwargs['random_n_latents'],
+    use_random_latents = True if feature_type == "latents" else False if feature_type == "hidden" else None
+    assert use_random_latents is not None
+    random_latents_known: List[Tuple[int, int, float, Tensor]] = load_steering_latents('movie', label='known', topk=kwargs['random_n_latents'],
                                                                               layers_range=[layer_known],
                                                                               model_alias=model_alias,
-                                                                              random_latents=True,
+                                                                              random_latents=use_random_latents,
                                                                               feature_type=feature_type)
     
-    random_latents_unknown: List[Tuple[int, float, Tensor]] = load_steering_latents('movie', label='unknown', topk=kwargs['random_n_latents'],
+    random_latents_unknown: List[Tuple[int, int, float, Tensor]] = load_steering_latents('movie', label='unknown', topk=kwargs['random_n_latents'],
                                                                               layers_range=[layer_unknown],
                                                                               model_alias=model_alias,
-                                                                              random_latents=True,
+                                                                              random_latents=use_random_latents,
                                                                               feature_type=feature_type)
     
     return known_latent, unknown_latent, random_latents_known, random_latents_unknown

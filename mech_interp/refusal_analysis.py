@@ -220,7 +220,7 @@ N=100
 max_new_tokens = 30
 batch_size = 100
 top_latents = {'known': 0, 'unknown': 0}
-coeff_values = {'known': 15, 'unknown': 20}
+coeff_values = {'known': 400, 'unknown': 400}
 split = 'test'
 feature_type = 'latents'
 assert feature_type in ["latents", "hidden"], feature_type
@@ -266,7 +266,7 @@ for e_idx, entity_type in enumerate(['player', 'city', 'movie', 'song']):
         
         counter_refusal[entity_type]['steered_unknown'] = count_refusals(unknown_steered_generations_full)
 
-    if 'steered_known_random' in categories:
+    if 'steered_known_random' in categories and random_latents_known is not None:
         random_latents_counter = []
         for random_latent in random_latents_known:
             _, random_steered_generations_full = steered_and_orig_generations(model, N, tokenized_prompts, pos_entities, pos_type=pos_type,
@@ -278,7 +278,7 @@ for e_idx, entity_type in enumerate(['player', 'city', 'movie', 'song']):
 
         counter_refusal[entity_type]['steered_known_random'] = random_latents_counter
 
-    if 'steered_unknown_random' in categories:
+    if 'steered_unknown_random' in categories and random_latents_unknown is not None:
         random_latents_counter = []
         for random_latent in random_latents_unknown:
             _, random_steered_generations_full = steered_and_orig_generations(model, N, tokenized_prompts, pos_entities, pos_type=pos_type,
@@ -290,25 +290,51 @@ for e_idx, entity_type in enumerate(['player', 'city', 'movie', 'song']):
         counter_refusal[entity_type]['steered_unknown_random'] = random_latents_counter
     
     if 'orthogonalized_unknown' in categories or 'orthogonalized_known' in categories:
-        if feature_type == "hidden":
-            raise NotImplementedError
-
         for ortho_idx, orhogonalization_type in enumerate(['unknown']):
-            if orhogonalization_type == 'unknown':
-                direction = unknown_latent[0][-1]
-            else:
-                direction = known_latent[0][-1]
-            if ortho_idx == 1:
-                # Load model again
-                model, tokenizer = load_model(model_alias)
-            
-            tl_orthogonalize_gemma_weights(model, direction=direction)
+            if feature_type == "hidden":
+                # For hidden features, we need to create projection matrices similar to tl_orthogonalize_gemma_weights
+                # but using a one-hot vector approach
+                if orhogonalization_type == 'unknown':
+                    # Get the layer and dimension index from unknown_latent
+                    layer, dimension_idx = unknown_latent[0][0], unknown_latent[0][1]
+                else:
+                    # Get the layer and dimension index from known_latent
+                    layer, dimension_idx = known_latent[0][0], known_latent[0][1]
 
-            # Run generations with orthogonalized model
-            orthogonalized_generations_full = run_generations(model, N, tokenized_prompts, max_new_tokens, batch_size)
-            torch.cuda.empty_cache()
+                if ortho_idx == 1:
+                    # Load model again
+                    model, tokenizer = load_model(model_alias)
 
-            counter_refusal[entity_type][f'orthogonalized_{orhogonalization_type}'] = count_refusals(orthogonalized_generations_full)
+                # Create a one-hot direction vector
+                d_model = model.cfg.d_model
+                direction = torch.zeros((d_model,), dtype=torch.float32)
+                direction[dimension_idx] = 1.0
+
+                # Now use this direction with the same orthogonalization function for consistency
+                tl_orthogonalize_gemma_weights(model, direction=direction)
+
+                # Run generations with orthogonalized model
+                orthogonalized_generations_full = run_generations(model, N, tokenized_prompts, max_new_tokens, batch_size)
+                torch.cuda.empty_cache()
+
+                counter_refusal[entity_type][f'orthogonalized_{orhogonalization_type}'] = count_refusals(orthogonalized_generations_full)
+
+            else:  # feature_type == "latents"
+                if orhogonalization_type == 'unknown':
+                    direction = unknown_latent[0][-1]
+                else:
+                    direction = known_latent[0][-1]
+                if ortho_idx == 1:
+                    # Load model again
+                    model, tokenizer = load_model(model_alias)
+
+                tl_orthogonalize_gemma_weights(model, direction=direction)
+
+                # Run generations with orthogonalized model
+                orthogonalized_generations_full = run_generations(model, N, tokenized_prompts, max_new_tokens, batch_size)
+                torch.cuda.empty_cache()
+
+                counter_refusal[entity_type][f'orthogonalized_{orhogonalization_type}'] = count_refusals(orthogonalized_generations_full)
 
             del model
         gc.collect()
@@ -322,7 +348,7 @@ for e_idx, entity_type in enumerate(['player', 'city', 'movie', 'song']):
 # Save counter_refusal results
 save_path = f'results/refusal_analysis_{feature_type}/{model_alias}'
 os.makedirs(save_path, exist_ok=True)
-with open(os.path.join(save_path, f'counter_refusal_{entity_type}_{known_label}.json'), 'w') as f:
+with open(os.path.join(save_path, f'counter_refusal_{known_label}.json'), 'w') as f:
     json.dump(counter_refusal, f)
 
 plot_counter_refusal(counter_refusal, save=True, feature_type=feature_type, **params_args)
@@ -359,9 +385,6 @@ known_latent, unknown_latent, random_latents_known, random_latents_unknown = loa
 tokenized_prompts, pos_entities, formatted_instructions = tokenized_prompts_dict_entity_type[entity_type][known_label], pos_entities_dict_entity_type[entity_type][known_label], formatted_instructions_dict_entity_type[entity_type][known_label]
 
 counter_refusals = {}
-
-if feature_type == "hidden":
-    raise NotImplementedError
 
 original_generations_full, steered_generations_full = steered_and_orig_generations(model, N, tokenized_prompts, pos_entities, pos_type='entity_last_to_end',
                                                                                 steering_latents=[random_latents_known[-2]], ablate_latents=None, feature_type=feature_type,
