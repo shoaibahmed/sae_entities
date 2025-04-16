@@ -54,7 +54,7 @@ python -m utils.activation_cache --model_alias gemma-2b-it --tokens_to_cache mod
 
 ## Refusal Analysis
 Models refuse to answer questions about unknown entities. We can therefore analyze the effect of steering the model towards an unknown entity latent by measuring the model's refusal rate.
-In `mech_interp/feature_analysis.py` we evaluate the impact of this steering.
+In `mech_interp/refusal_analysis.py` we evaluate the impact of this steering. This also supports `hidden rep` steering.
 
 ## Citation
 If you find this work useful, please consider citing:
