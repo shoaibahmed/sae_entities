@@ -89,13 +89,22 @@ for entity_type in ALL_ENTITY_TYPES:
                                 feature_type=feature_type, save=True, **wikidata_prompts_experiment)
 
 # %%
-# Load the activations for the model -- only computed for the final token of the entity residual stream
-dataloader = get_dataloader(model_alias, wikidata_prompts_experiment['tokens_to_cache'], n_layers, d_model, dataset_name=wikidata_prompts_experiment["dataset_name"], batch_size=16)
-acts_labels_dict_wikidata = get_acts_labels_dict_(model_alias, tokenizer, dataloader, LAYERS_WITH_SAE, **wikidata_prompts_experiment)
-print("Wikidata activation size:", acts_labels_dict_wikidata[LAYERS_WITH_SAE[0]]['acts'].shape, acts_labels_dict_wikidata[LAYERS_WITH_SAE[0]]['labels'].shape)
+acts_labels_dict_wikidata = {}
+for entity_type in ALL_ENTITY_TYPES:
+    wikidata_prompts_experiment['dataset_name'] = f'wikidata_{entity_type}'
+
+    # Load the activations for the model -- only computed for the final token of the entity residual stream
+    dataloader = get_dataloader(model_alias, wikidata_prompts_experiment['tokens_to_cache'], n_layers, d_model, dataset_name=wikidata_prompts_experiment["dataset_name"], batch_size=16)
+    acts_labels_dict_wikidata[entity_type] = get_acts_labels_dict_(model_alias, tokenizer, dataloader, LAYERS_WITH_SAE, **wikidata_prompts_experiment)
+    print(f"Wikidata {entity_type} activation size:", acts_labels_dict_wikidata[entity_type][LAYERS_WITH_SAE[0]]['acts'].shape, acts_labels_dict_wikidata[entity_type][LAYERS_WITH_SAE[0]]['labels'].shape)
 
 # %%
+# TODO: split the dataset into train / test -- only train on player entity and evaluate on all others
+selected_wikidata_entity = "player"
+
 # TODO: train probes here
+probe_dim = acts_labels_dict_pile[LAYERS_WITH_SAE[0]]['acts'].shape[1]
+print("Probe dim:", probe_dim)
 
 # %%
 # TODO: perform model steering using probes
