@@ -9,6 +9,8 @@ import os
 import copy
 from tqdm import tqdm
 
+import wandb
+
 import numpy as np
 import torch
 
@@ -151,7 +153,7 @@ print(probe_cls)
 
 # %%
 
-def evaluate_model(probe_cls: torch.nn.Module, eval_loader: torch.utils.data.DataLoader):
+def evaluate_model(probe_cls: torch.nn.Module, eval_loader: torch.utils.data.DataLoader, split: str):
     probe_cls.eval()
     total = 0
     num_correct = 0
@@ -163,11 +165,21 @@ def evaluate_model(probe_cls: torch.nn.Module, eval_loader: torch.utils.data.Dat
         correct = pred.to(y.dtype) == y
         num_correct += int(torch.sum(correct))
     acc = 100. * float(num_correct) / total
-    print(f"!! Test for epoch: {epoch+1} / total: {total} / correct: {correct} / acc: {acc:.2f}%")
+    if wandb.run is not None:
+        output_dict = {"total": total, "correct": num_correct, "acc": acc}
+        wandb.log({f"{split}/{k}": v for k, v in output_dict.items()})
+    print(f"!! Split: {split} / total: {total} / correct: {correct} / acc: {acc:.2f}%")
 
+# %%
+# Setup w&b
+wandb_project = "knowledge_awareness"
+if wandb_project is not None:
+    wandb_run_name = f"probes_analysis_train_{selected_wikidata_entity}"
+    wandb.init(project=wandb_project, name=wandb_run_name, config=None, resume=False)
 
 # %%
 # Train the model on the selected examples
+# TODO: add support for activation steering and SAE latents directly here
 for layer in LAYERS_WITH_SAE:
     print("="*25)
     print(f"Evaluating layer: {layer}")
@@ -197,18 +209,21 @@ for layer in LAYERS_WITH_SAE:
     # Train the probe classifier
     for epoch in tqdm(range(n_epochs)):
         probe_cls.train()
-        for x, y in train_loader:
+        for step, (x, y) in enumerate(train_loader):
             x, y = x.to(device), y.to(device)
             pred = probe_cls(x)
             assert pred.shape == y.shape, f"{pred.shape} != {y.shape}"
             loss = loss_fn(pred, y)
+            if wandb.run is not None:
+                output_dict = {"epoch": epoch, "step": step, "loss": float(loss)}
+                wandb.log({f"training/{k}": v for k, v in output_dict.items()})
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
         # Evaluate test performance
-        evaluate_model(probe_cls, eval_loader)
+        evaluate_model(probe_cls, eval_loader, split=f"test_{selected_wikidata_entity}")
 
     checkpoint_file = f"entity_{selected_wikidata_entity}_layer_{layer}.pth"
     torch.save(probe_cls.state_dict(), os.path.join(checkpoint_dir, checkpoint_file))
@@ -222,7 +237,7 @@ for layer in LAYERS_WITH_SAE:
         print(f"Evaluating on entity type: {entity_type}")
         entity_eval_dataset = torch.utils.data.TensorDataset(acts_labels_dict_wikidata[selected_wikidata_entity][layer]["acts"], acts_labels_dict_wikidata[selected_wikidata_entity][layer]["labels"])
         entity_eval_loader = torch.utils.data.DataLoader(entity_eval_dataset, batch_size=batch_size, shuffle=False)
-        evaluate_model(probe_cls, entity_eval_loader)
+        evaluate_model(probe_cls, entity_eval_loader, split=f"eval_{entity_type}")
 
 # %%
 # TODO: perform model steering using probes
