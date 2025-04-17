@@ -43,6 +43,10 @@ python -m dataset.process_data.wikidata.create_wikidata_entity_queries --model_p
 ## [New] Direct Hidden Rep Analysis
 In `mech_interp/hidden_analysis.py` we run the metrics to find the most relevant hiddens.
 
+## [New] Training other probes
+We can train other probes
+In `mech_interp/probes_analysis.py` we can evaluate the impact of steering the model using these probes.
+
 ## SAE Latent Analysis
 In `mech_interp/feature_analysis.py` we compute the SAE latent scores for all layers as well as run metrics to find the most relevant latents.
 
