@@ -5,6 +5,7 @@ if ipython is not None:
     ipython.run_line_magic('load_ext', 'autoreload')
     ipython.run_line_magic('autoreload', '2')
 
+import os
 import copy
 from tqdm import tqdm
 
@@ -122,44 +123,106 @@ eval_idx = [x for x in all_ex_idx if x not in train_idx]
 print(f"# examples: {len(all_ex_idx)} / # train: {len(train_idx)} / # eval: {len(eval_idx)}")
 
 # %%
-# Define the probe classifier
-probe_feature_dim = 32
-probe_cls = torch.nn.Sequential(
-    torch.nn.Linear(hidden_dim, probe_feature_dim),
-    torch.nn.BatchNorm1d(probe_feature_dim),
-    torch.nn.ReLU(),
-    torch.nn.Linear(hidden_dim, probe_feature_dim),
-).to("cuda")
-base_state_dict = copy.deepcopy(probe_cls.state_dict())  # to ensure same model init
-print(probe_cls)
-
-# %%
 # Define training hyperparameters
 n_epochs = 100
 batch_size = 256
 loss_fn = torch.nn.BCEWithLogitsLoss()  # binary classification
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# %%
+# Setup checkpoint directory
+checkpoint_dir = "checkpoints"
+if not os.path.exists(checkpoint_dir):
+    os.mkdir(checkpoint_dir)
+    print("Checkpoint directory created:", checkpoint_dir)
+
+# %%
+# Define the probe classifier
+probe_feature_dim = 32
+output_dims = 1  # binary classification
+probe_cls = torch.nn.Sequential(
+    torch.nn.Linear(hidden_dim, probe_feature_dim),
+    torch.nn.BatchNorm1d(probe_feature_dim),
+    torch.nn.ReLU(),
+    torch.nn.Linear(hidden_dim, output_dims),
+).to(device)
+base_state_dict = copy.deepcopy(probe_cls.state_dict())  # to ensure same model init
+print(probe_cls)
+
+# %%
+
+def evaluate_model(probe_cls: torch.nn.Module, eval_loader: torch.utils.data.DataLoader):
+    probe_cls.eval()
+    total = 0
+    num_correct = 0
+    for x, y in eval_loader:
+        x, y = x.to(device), y.to(device)
+        pred = probe_cls(x)
+        assert pred.shape == y.shape, f"{pred.shape} != {y.shape}"
+        pred = torch.sigmoid(pred) >= 0.5
+        correct = pred.to(y.dtype) == y
+        num_correct += int(torch.sum(correct))
+    acc = 100. * float(num_correct) / total
+    print(f"!! Test for epoch: {epoch+1} / total: {total} / correct: {correct} / acc: {acc:.2f}%")
+
 
 # %%
 # Train the model on the selected examples
 for layer in LAYERS_WITH_SAE:
+    print("="*25)
     print(f"Evaluating layer: {layer}")
     data = acts_labels_dict_wikidata[selected_wikidata_entity][layer]
     acts, labels = data["acts"], data["labels"]
 
     train_data = torch.stack([acts[i] for i in train_idx], dim=0)
-    labels = torch.stack([labels[i] for i in train_idx], dim=0)
-    print(f"Train data: {train_data.shape} / labels: {labels.shape}")
+    train_labels = torch.stack([labels[i] for i in train_idx], dim=0)
+    print(f"Train data: {train_data.shape} / labels: {train_labels.shape}")
+
+    eval_data = torch.stack([acts[i] for i in eval_idx], dim=0)
+    eval_labels = torch.stack([labels[i] for i in eval_idx], dim=0)
+    print(f"Eval data: {eval_data.shape} / labels: {eval_labels.shape}")
 
     # Convert examples into a pytorch dataloader
-    tensor_dataset = torch.utils.data.TensorDataset(train_data, labels)
-    dataloader = torch.utils.data.DataLoader(tensor_dataset, batch_size=batch_size, shuffle=True)
+    train_dataset = torch.utils.data.TensorDataset(train_data, train_labels)
+    eval_dataset = torch.utils.data.TensorDataset(eval_data, train_labels)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    eval_loader = torch.utils.data.DataLoader(eval_dataset, batch_size=batch_size, shuffle=False)
 
     # Load the base probe classifier
     probe_cls.load_state_dict(base_state_dict)
 
+    # Define the optimizer
+    optimizer = torch.optim.AdamW(probe_cls.parameters(), lr=1e-3, weight_decay=1e-4)
+
     # Train the probe classifier
     for epoch in tqdm(range(n_epochs)):
-        pass
+        probe_cls.train()
+        for x, y in train_loader:
+            x, y = x.to(device), y.to(device)
+            pred = probe_cls(x)
+            assert pred.shape == y.shape, f"{pred.shape} != {y.shape}"
+            loss = loss_fn(pred, y)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        # Evaluate test performance
+        evaluate_model(probe_cls, eval_loader)
+
+    checkpoint_file = f"entity_{selected_wikidata_entity}_layer_{layer}.pth"
+    torch.save(probe_cls.state_dict(), os.path.join(checkpoint_dir, checkpoint_file))
+
+    # evaluate the probe classifier on all entity types
+    for entity_type in ALL_ENTITY_TYPES:
+        if entity_type == selected_wikidata_entity:
+            continue  # already evaluated in the form of the test set
+
+        print("-"*10)
+        print(f"Evaluating on entity type: {entity_type}")
+        entity_eval_dataset = torch.utils.data.TensorDataset(acts_labels_dict_wikidata[selected_wikidata_entity][layer]["acts"], acts_labels_dict_wikidata[selected_wikidata_entity][layer]["labels"])
+        entity_eval_loader = torch.utils.data.DataLoader(entity_eval_dataset, batch_size=batch_size, shuffle=False)
+        evaluate_model(probe_cls, entity_eval_loader)
 
 # %%
 # TODO: perform model steering using probes
