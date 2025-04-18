@@ -216,16 +216,16 @@ for layer in LAYERS_WITH_SAE:
             loss = loss_fn(pred, y)
             if wandb.run is not None:
                 output_dict = {"epoch": epoch, "step": step, "loss": float(loss)}
-                wandb.log({f"training/{k}": v for k, v in output_dict.items()})
+                wandb.log({f"layer_{layer}/probe/training/{k}": v for k, v in output_dict.items()})
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
         # Evaluate test performance
-        evaluate_model(probe_cls, eval_loader, split=f"test_{selected_wikidata_entity}")
+        evaluate_model(probe_cls, eval_loader, split=f"layer_{layer}/probe/test_{selected_wikidata_entity}")
 
-    checkpoint_file = f"entity_{selected_wikidata_entity}_layer_{layer}.pth"
+    checkpoint_file = f"probe_entity_{selected_wikidata_entity}_layer_{layer}.pth"
     torch.save(probe_cls.state_dict(), os.path.join(checkpoint_dir, checkpoint_file))
 
     # evaluate the probe classifier on all entity types
@@ -237,7 +237,7 @@ for layer in LAYERS_WITH_SAE:
         print(f"Evaluating on entity type: {entity_type}")
         entity_eval_dataset = torch.utils.data.TensorDataset(acts_labels_dict_wikidata[selected_wikidata_entity][layer]["acts"], acts_labels_dict_wikidata[selected_wikidata_entity][layer]["labels"])
         entity_eval_loader = torch.utils.data.DataLoader(entity_eval_dataset, batch_size=batch_size, shuffle=False)
-        evaluate_model(probe_cls, entity_eval_loader, split=f"eval_{entity_type}")
+        evaluate_model(probe_cls, entity_eval_loader, split=f"layer_{layer}/probe/eval_{entity_type}")
 
 # %%
 # TODO: perform model steering using probes
