@@ -180,23 +180,24 @@ if wandb_project is not None:
 # %%
 # Train the model on the selected examples
 # TODO: add support for activation steering and SAE latents directly here
+steering_vecs = {}
 for layer in LAYERS_WITH_SAE:
     print("="*25)
     print(f"Evaluating layer: {layer}")
     data = acts_labels_dict_wikidata[selected_wikidata_entity][layer]
     acts, labels = data["acts"], data["labels"]
 
-    train_data = torch.stack([acts[i] for i in train_idx], dim=0)
+    train_acts = torch.stack([acts[i] for i in train_idx], dim=0)
     train_labels = torch.stack([labels[i] for i in train_idx], dim=0)
-    print(f"Train data: {train_data.shape} / labels: {train_labels.shape}")
+    print(f"Train acts: {train_acts.shape} / labels: {train_labels.shape}")
 
-    eval_data = torch.stack([acts[i] for i in eval_idx], dim=0)
+    eval_acts = torch.stack([acts[i] for i in eval_idx], dim=0)
     eval_labels = torch.stack([labels[i] for i in eval_idx], dim=0)
-    print(f"Eval data: {eval_data.shape} / labels: {eval_labels.shape}")
+    print(f"Eval acts: {eval_acts.shape} / labels: {eval_labels.shape}")
 
     # Convert examples into a pytorch dataloader
-    train_dataset = torch.utils.data.TensorDataset(train_data, train_labels)
-    eval_dataset = torch.utils.data.TensorDataset(eval_data, eval_labels)
+    train_dataset = torch.utils.data.TensorDataset(train_acts, train_labels)
+    eval_dataset = torch.utils.data.TensorDataset(eval_acts, eval_labels)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     eval_loader = torch.utils.data.DataLoader(eval_dataset, batch_size=batch_size, shuffle=False)
 
@@ -228,6 +229,15 @@ for layer in LAYERS_WITH_SAE:
     checkpoint_file = f"probe_entity_{selected_wikidata_entity}_layer_{layer}.pth"
     torch.save(probe_cls.state_dict(), os.path.join(checkpoint_dir, checkpoint_file))
 
+    # Subtract average activation to construct an steering vector
+    pos_act = torch.mean([train_acts[train_labels == 0.0]], dim=0)  # [B, D]
+    neg_act = torch.mean([train_acts[train_labels == 1.0]], dim=0)  # [B, D]
+    steering_vec = pos_act - neg_act
+    steering_vecs[layer] = steering_vec
+    print(f"Pos act: {pos_act.shape} / norm: {torch.norm(pos_act)}")
+    print(f"Neg act: {neg_act.shape} / norm: {torch.norm(neg_act)}")
+    print(f"Steering vector: {steering_vec.shape} / norm: {torch.norm(steering_vec)}")
+
     # evaluate the probe classifier on all entity types
     for entity_type in ALL_ENTITY_TYPES:
         if entity_type == selected_wikidata_entity:
@@ -240,4 +250,4 @@ for layer in LAYERS_WITH_SAE:
         evaluate_model(probe_cls, entity_eval_loader, split=f"layer_{layer}/probe/eval_{entity_type}")
 
 # %%
-# TODO: perform model steering using probes
+# TODO: perform model steering using probes / steering vectors
