@@ -196,7 +196,7 @@ for layer in LAYERS_WITH_SAE:
 
     # Convert examples into a pytorch dataloader
     train_dataset = torch.utils.data.TensorDataset(train_data, train_labels)
-    eval_dataset = torch.utils.data.TensorDataset(eval_data, train_labels)
+    eval_dataset = torch.utils.data.TensorDataset(eval_data, eval_labels)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     eval_loader = torch.utils.data.DataLoader(eval_dataset, batch_size=batch_size, shuffle=False)
 
