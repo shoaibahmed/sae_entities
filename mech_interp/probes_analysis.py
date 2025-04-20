@@ -146,7 +146,7 @@ probe_cls = torch.nn.Sequential(
     torch.nn.Linear(hidden_dim, probe_feature_dim),
     torch.nn.BatchNorm1d(probe_feature_dim),
     torch.nn.ReLU(),
-    torch.nn.Linear(hidden_dim, output_dims),
+    torch.nn.Linear(probe_feature_dim, output_dims),
 ).to(device)
 base_state_dict = copy.deepcopy(probe_cls.state_dict())  # to ensure same model init
 print(probe_cls)
@@ -159,16 +159,18 @@ def evaluate_model(probe_cls: torch.nn.Module, eval_loader: torch.utils.data.Dat
     num_correct = 0
     for x, y in eval_loader:
         x, y = x.to(device), y.to(device)
-        pred = probe_cls(x)
+        y = (y >= 0.5).int()  # convert from float to int labels
+        pred = probe_cls(x).squeeze(dim=-1)
         assert pred.shape == y.shape, f"{pred.shape} != {y.shape}"
-        pred = torch.sigmoid(pred) >= 0.5
+        pred = (torch.sigmoid(pred) >= 0.5).int()
         correct = pred.to(y.dtype) == y
         num_correct += int(torch.sum(correct))
+        total += len(correct)
     acc = 100. * float(num_correct) / total
     if wandb.run is not None:
         output_dict = {"total": total, "correct": num_correct, "acc": acc}
         wandb.log({f"{split}/{k}": v for k, v in output_dict.items()})
-    print(f"!! Split: {split} / total: {total} / correct: {correct} / acc: {acc:.2f}%")
+    print(f"!! Split: {split} / total: {total} / correct: {num_correct} / acc: {acc:.2f}%")
 
 # %%
 # Setup w&b
@@ -212,9 +214,9 @@ for layer in LAYERS_WITH_SAE:
         probe_cls.train()
         for step, (x, y) in enumerate(train_loader):
             x, y = x.to(device), y.to(device)
-            pred = probe_cls(x)
+            pred = probe_cls(x).squeeze(dim=-1)  # shape: [B, 1] -> [B,]
             assert pred.shape == y.shape, f"{pred.shape} != {y.shape}"
-            loss = loss_fn(pred, y)
+            loss = loss_fn(pred, y.float())
             if wandb.run is not None:
                 output_dict = {"epoch": epoch, "step": step, "loss": float(loss)}
                 wandb.log({f"layer_{layer}/probe/training/{k}": v for k, v in output_dict.items()})
@@ -229,9 +231,9 @@ for layer in LAYERS_WITH_SAE:
     checkpoint_file = f"probe_entity_{selected_wikidata_entity}_layer_{layer}.pth"
     torch.save(probe_cls.state_dict(), os.path.join(checkpoint_dir, checkpoint_file))
 
-    # Subtract average activation to construct an steering vector
-    pos_act = torch.mean([train_acts[train_labels == 0.0]], dim=0)  # [B, D]
-    neg_act = torch.mean([train_acts[train_labels == 1.0]], dim=0)  # [B, D]
+    # Subtract average activation to construct a steering vector
+    pos_act = torch.mean(train_acts[train_labels == 0.0], dim=0)  # [B, D]
+    neg_act = torch.mean(train_acts[train_labels == 1.0], dim=0)  # [B, D]
     steering_vec = pos_act - neg_act
     steering_vecs[layer] = steering_vec
     print(f"Pos act: {pos_act.shape} / norm: {torch.norm(pos_act)}")
