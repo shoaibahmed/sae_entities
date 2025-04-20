@@ -247,7 +247,7 @@ for layer in LAYERS_WITH_SAE:
 
         print("-"*10)
         print(f"Evaluating on entity type: {entity_type}")
-        entity_eval_dataset = torch.utils.data.TensorDataset(acts_labels_dict_wikidata[selected_wikidata_entity][layer]["acts"], acts_labels_dict_wikidata[selected_wikidata_entity][layer]["labels"])
+        entity_eval_dataset = torch.utils.data.TensorDataset(acts_labels_dict_wikidata[entity_type][layer]["acts"], acts_labels_dict_wikidata[entity_type][layer]["labels"])
         entity_eval_loader = torch.utils.data.DataLoader(entity_eval_dataset, batch_size=batch_size, shuffle=False)
         evaluate_model(probe_cls, entity_eval_loader, split=f"layer_{layer}/probe/eval_{entity_type}")
 
